@@ -1,4 +1,4 @@
-package br.com.camplana.Controller;
+package br.com.camplana.controller;
 
 public class UsuarioController {
 

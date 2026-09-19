@@ -1,4 +1,4 @@
-package br.com.camplana.Service;
+package br.com.camplana.service;
 
 public class UsuarioService {
 
