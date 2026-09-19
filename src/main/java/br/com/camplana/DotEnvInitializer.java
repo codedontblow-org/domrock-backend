@@ -15,7 +15,6 @@ public class DotEnvInitializer implements ApplicationContextInitializer<Configur
     public void initialize(ConfigurableApplicationContext context) {
         try {
             Map<String, Object> envProperties = new HashMap<>();
-            // Procura o arquivo .env na raiz do projeto
             Files.lines(Paths.get(".env")).forEach(line -> {
                 line = line.trim();
                 if (!line.isEmpty() && !line.startsWith("#") && line.contains("=")) {
@@ -31,8 +30,7 @@ public class DotEnvInitializer implements ApplicationContextInitializer<Configur
                         .addFirst(new MapPropertySource("dotEnvProperties", envProperties));
             }
         } catch (IOException e) {
-            // Se o arquivo .env não existir (em produção, por exemplo), ele ignora silenciosamente
-            System.out.println("⚠️ Arquivo .env não localizado. Usando variáveis do sistema.");
+            System.out.println("Arquivo .env não localizado. Usando variáveis do sistema.");
         }
     }
 }

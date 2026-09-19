@@ -1,4 +1,4 @@
-package br.com.camplana.Repository;
+package br.com.camplana.repository;
 
 public class UsuarioRepository {
 
