@@ -1,4 +1,4 @@
-package br.com.camplana.exception;
+package br.com.camplana.handler;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -7,65 +7,67 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import br.com.camplana.exception.BadRequestException;
+import br.com.camplana.exception.BadRequestExceptionDetails;
+import br.com.camplana.exception.ValidationException;
+import br.com.camplana.exception.ValidationExceptionDetails;
+
 import java.time.LocalDateTime;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<BadRequestExceptionDetails> handleBadRequestException(
-            BadRequestException exception,
-            HttpServletRequest request
-    ) {
+        @ExceptionHandler(BadRequestException.class)
+        public ResponseEntity<BadRequestExceptionDetails> handleBadRequestException(
+                        BadRequestException exception,
+                        HttpServletRequest request) {
 
-        BadRequestExceptionDetails details = BadRequestExceptionDetails.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message(exception.getMessage())
-                .path(request.getRequestURI())
-                .build();
+                BadRequestExceptionDetails details = BadRequestExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(exception.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(details);
-    }
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
 
-    @ExceptionHandler(ValidationException.class)
-    public ResponseEntity<ValidationExceptionDetails> handleValidationException(
-            ValidationException exception,
-            HttpServletRequest request
-    ) {
+        @ExceptionHandler(ValidationException.class)
+        public ResponseEntity<ValidationExceptionDetails> handleValidationException(
+                        ValidationException exception,
+                        HttpServletRequest request) {
 
-        ValidationExceptionDetails details = ValidationExceptionDetails.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message(exception.getMessage())
-                .path(request.getRequestURI())
-                .build();
+                ValidationExceptionDetails details = ValidationExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(exception.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(details);
-    }
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ValidationExceptionDetails> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException exception,
-            HttpServletRequest request
-    ) {
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ValidationExceptionDetails> handleMethodArgumentNotValid(
+                        MethodArgumentNotValidException exception,
+                        HttpServletRequest request) {
 
-        ValidationExceptionDetails details = ValidationExceptionDetails.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message("Erro de validação.")
-                .path(request.getRequestURI())
-                .build();
+                ValidationExceptionDetails details = ValidationExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message("Erro de validação.")
+                                .path(request.getRequestURI())
+                                .build();
 
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(details);
-    }
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
 }

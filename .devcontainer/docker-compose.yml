@@ -15,7 +15,7 @@ services:
         POSTGRES_HOSTNAME: db
 
     volumes:
-      - ../..:/workspaces:cached
+      - ..:/workspaces/domrock-backend:cached
       
     # Overrides default command so things don't shut down after the process ends.
     command: sleep infinity

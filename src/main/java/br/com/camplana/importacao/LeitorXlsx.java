@@ -17,8 +17,6 @@ import java.util.Map;
 @Component
 public class LeitorXlsx {
 
-    private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE;
-
     public List<Map<String, String>> ler(MultipartFile arquivo) throws IOException {
         List<Map<String, String>> linhas = new ArrayList<>();
 
@@ -26,7 +24,8 @@ public class LeitorXlsx {
             Sheet sheet = workbook.getSheetAt(0);
 
             Row cabecalho = sheet.getRow(sheet.getFirstRowNum());
-            if (cabecalho == null) return linhas;
+            if (cabecalho == null)
+                return linhas;
 
             Map<Integer, String> colunaParaHeader = new LinkedHashMap<>();
             for (Cell c : cabecalho) {
@@ -38,7 +37,8 @@ public class LeitorXlsx {
 
             for (int r = sheet.getFirstRowNum() + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
-                if (row == null) continue;
+                if (row == null)
+                    continue;
 
                 Map<String, String> mapa = new LinkedHashMap<>();
                 boolean algumaCelulaPreenchida = false;
@@ -46,11 +46,13 @@ public class LeitorXlsx {
                 for (Map.Entry<Integer, String> entry : colunaParaHeader.entrySet()) {
                     Cell cell = row.getCell(entry.getKey(), Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
                     String valor = celulaComoTexto(cell);
-                    if (!valor.isBlank()) algumaCelulaPreenchida = true;
+                    if (!valor.isBlank())
+                        algumaCelulaPreenchida = true;
                     mapa.put(entry.getValue(), valor);
                 }
 
-                if (algumaCelulaPreenchida) linhas.add(mapa);
+                if (algumaCelulaPreenchida)
+                    linhas.add(mapa);
             }
         }
         return linhas;
