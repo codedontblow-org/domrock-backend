@@ -134,7 +134,7 @@ Antes de executar o projeto, certifique-se de possuir:
 ### 1. Clone o repositório
 
 ```bash
-git clone <URL_DO_REPOSITORIO>
+git clone https://github.com/codedontblow-org/domrock-backend
 cd domrock-backend
 ```
 
@@ -152,16 +152,8 @@ Configure as credenciais e a URL do PostgreSQL conforme seu ambiente.
 
 Utilizando o Maven Wrapper:
 
-Linux/macOS:
-
 ```bash
 ./mvnw spring-boot:run
-```
-
-Windows:
-
-```bash
-mvnw.cmd spring-boot:run
 ```
 
 Ou execute a aplicação diretamente pela IDE.
