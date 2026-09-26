@@ -9,8 +9,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/importacao")
-public class    ImportacaoController {
+@RequestMapping("/importacao")
+public class ImportacaoController {
 
     private final ImportacaoService importacaoService;
 

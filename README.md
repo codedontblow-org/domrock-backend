@@ -8,29 +8,33 @@ O projeto utiliza uma arquitetura em camadas (Layered Architecture), PostgreSQL 
 
 ## Tecnologias Utilizadas
 
-![Java](https://img.shields.io/badge/Java-17-141416?style=for-the-badge\&logo=openjdk\&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-141416?style=for-the-badge\&logo=springboot\&logoColor=white)
-![Maven](https://img.shields.io/badge/Maven-141416?style=for-the-badge\&logo=apachemaven\&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-141416?style=for-the-badge\&logo=postgresql\&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-141416?style=for-the-badge\&logo=docker\&logoColor=white)
+![Java](https://img.shields.io/badge/Java-17-141416?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-141416?style=for-the-badge&logo=springboot&logoColor=white)
+![Maven](https://img.shields.io/badge/Maven-141416?style=for-the-badge&logo=apachemaven&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-141416?style=for-the-badge&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-141416?style=for-the-badge&logo=docker&logoColor=white)
+![gRPC](https://img.shields.io/badge/gRPC-141416?style=for-the-badge&logo=gRPC&logoColor=white)
 
 ---
 
-## Arquitetura
-
-**Tipo de Arquitetura:** Layered Architecture (Arquitetura em Camadas REST)
-
-A aplicação é organizada em camadas responsáveis por diferentes partes do sistema:
-
-* **Controller** — exposição dos endpoints REST e comunicação com o frontend.
-* **Service** — implementação das regras de negócio e integração com serviços externos/IA.
-* **Repository** — acesso e persistência dos dados utilizando Spring Data JPA.
-* **Entity** — representação das entidades persistidas no PostgreSQL.
-* **Config** — configurações globais da aplicação, como segurança e CORS.
 
 ---
 
-## Estrutura do Projeto
+## 🏗️ Arquitetura
+
+**Tipo de Arquitetura:** Layered Architecture (Arquitetura em Camadas REST + gRPC Client)
+
+A aplicação é organizada nas seguintes camadas:
+
+* **Controller** — Exposição dos endpoints REST (ex: `/chat`, `/usuarios`) para comunicação com o Frontend.
+* **Service / gRPC Client** — Lógica de negócio e invocações do cliente gRPC direcionadas ao microserviço Python/Lana na porta `50051`.
+* **Repository** — Camada de acesso e persistência utilizando Spring Data JPA.
+* **Entity** — Representação de tabelas no PostgreSQL.
+* **Proto / gRPC Stubs** — Contratos Protobuf (`.proto`) compilados para comunicação entre serviços.
+
+---
+
+## 📂 Estrutura do Projeto
 
 ```text
 domrock-backend/
@@ -43,12 +47,13 @@ domrock-backend/
 ├── src/
 │   ├── main/
 │   │   ├── java/br/com/camplana/
-│   │   │   ├── config/       # Beans globais e configurações
-│   │   │   ├── Controller/   # Controllers REST
+│   │   │   ├── config/       # Beans globais e configurações de segurança/gRPC
+│   │   │   ├── Controller/   # Controllers REST (Ex: IAController no endpoint /chat)
 │   │   │   ├── Entity/       # Entidades JPA
 │   │   │   ├── Repository/   # Interfaces Spring Data JPA
-│   │   │   └── Service/      # Regras de negócio e integração com IA
+│   │   │   └── Service/      # Regras de negócio e cliente gRPC para a Lana
 │   │   │
+│   │   ├── proto/            # Arquivos de contrato de protocolo (.proto)
 │   │   └── resources/
 │   │       └── application.properties
 │   │
@@ -59,7 +64,7 @@ domrock-backend/
 ├── Dockerfile              # Configuração da imagem Docker
 ├── mvnw                    # Maven Wrapper para Linux/macOS
 ├── mvnw.cmd                # Maven Wrapper para Windows
-├── pom.xml                 # Dependências e configuração do Maven
+├── pom.xml                 # Dependências (com gRPC e Protobuf) e build Maven
 ├── CHANGELOG.md            # Histórico de alterações
 ├── LICENSE                 # Licença do projeto
 └── README.md               # Documentação principal
@@ -67,7 +72,7 @@ domrock-backend/
 
 ---
 
-## Banco de Dados
+## 🗄️ Banco de Dados
 
 O projeto utiliza **PostgreSQL 17** como banco de dados relacional principal.
 
@@ -81,6 +86,8 @@ O projeto disponibiliza um arquivo `.env.example` contendo o modelo das variáve
 DB_URL=jdbc:postgresql://localhost:5432/camplana
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
+GRPC_LANA_HOST=localhost
+GRPC_LANA_PORT=50051
 ```
 
 ### Configuração do ambiente
@@ -148,19 +155,23 @@ cp .env.example .env
 
 Configure as credenciais e a URL do PostgreSQL conforme seu ambiente.
 
-### 3. Execute a aplicação
+
+### 3. Compilar e Executar
 
 Utilizando o Maven Wrapper:
 
 ```bash
-./mvnw spring-boot:run
+# Compilar contratos proto e iniciar aplicação
+
+./mvnw clean spring-boot:run
 ```
 
 Ou execute a aplicação diretamente pela IDE.
 
 ---
 
-## Desenvolvimento com Dev Container
+
+## 🐳 Desenvolvimento com Dev Container
 
 O projeto possui configuração de **Dev Container**, permitindo que o ambiente de desenvolvimento seja padronizado utilizando Docker.
 
