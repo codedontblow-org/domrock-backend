@@ -1,6 +1,6 @@
 -- Eventos de RH das intercorrencias da especificacao Dom Rock.
 -- matricula sem FK: o script nao corrige inconsistências
--- de pendencias lista matriculas que nao batem com a base de RH.
+-- o relatório de pendências lista eventuais matrículas que nao nao batem com a base de RH.
 CREATE TABLE evento_rh (
     id SERIAL PRIMARY KEY,
     matricula VARCHAR(20) NOT NULL,
