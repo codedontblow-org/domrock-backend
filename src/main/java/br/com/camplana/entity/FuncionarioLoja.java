@@ -15,7 +15,7 @@ import lombok.Setter;
 public class FuncionarioLoja {
 
     @EmbeddedId
-    private FuncionarioLojaId id = new FuncionarioLojaId();
+    private FuncionarioLojaId id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId("funcionarioId")
