@@ -1,8 +1,8 @@
 package br.com.camplana.controller;
 
-import br.com.camplana.dto.UsuarioPostBody;
-import br.com.camplana.dto.UsuarioPutBody;
-import br.com.camplana.dto.UsuarioResponse;
+import br.com.camplana.dto.usuario.UsuarioPostBody;
+import br.com.camplana.dto.usuario.UsuarioPutBody;
+import br.com.camplana.dto.usuario.UsuarioResponse;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.mapper.UsuarioMapper;
 import br.com.camplana.service.UsuarioService;
@@ -11,13 +11,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Pageable;
 
-import java.util.List;
-
 @RestController
-@RequestMapping("/usuario")
+@RequestMapping("/api/usuarios")
 @RequiredArgsConstructor
 public class UsuarioController {
     private final UsuarioService usuarioService;
@@ -52,12 +51,6 @@ public class UsuarioController {
         usuarioMapper.updateEntity(usuario, body);
         Usuario updatedUsuario = usuarioService.update(usuario);
         return ResponseEntity.ok(usuarioMapper.toResponse(updatedUsuario));
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> remove(@PathVariable Integer id) {
-        usuarioService.remove(id);
-        return ResponseEntity.noContent().build();
     }
 
 }

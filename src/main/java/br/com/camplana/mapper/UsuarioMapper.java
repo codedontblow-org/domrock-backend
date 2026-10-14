@@ -1,8 +1,8 @@
 package br.com.camplana.mapper;
 
-import br.com.camplana.dto.UsuarioPutBody;
-import br.com.camplana.dto.UsuarioPostBody;
-import  br.com.camplana.dto.UsuarioResponse;
+import br.com.camplana.dto.usuario.UsuarioPutBody;
+import br.com.camplana.dto.usuario.UsuarioPostBody;
+import br.com.camplana.dto.usuario.UsuarioResponse;
 import br.com.camplana.entity.Usuario;
 import org.springframework.stereotype.Component;
 
@@ -21,25 +21,13 @@ public class UsuarioMapper {
     }
 
     public void updateEntity(Usuario usuario, UsuarioPutBody body) {
-        if (body.nome() != null) {
-            usuario.setNome(body.nome());
-        }
-
-        if (body.email() != null) {
-            usuario.setEmail(body.email());
-        }
-
-        if (body.perfil() != null) {
-            usuario.setPerfil(body.perfil());
-        }
+        if (body.nome() != null)   usuario.setNome(body.nome());
+        if (body.email() != null)  usuario.setEmail(body.email());
+        if (body.perfil() != null) usuario.setPerfil(body.perfil());
     }
 
     public UsuarioResponse toResponse(Usuario usuario) {
-        return new UsuarioResponse(
-                usuario.getId(),
-                usuario.getNome(),
-                usuario.getEmail(),
-                usuario.getPerfil()
-        );
+        return new UsuarioResponse(usuario.getId(), usuario.getNome(), usuario.getEmail(),
+                usuario.getPerfil(), usuario.getAtivo());
     }
 }
