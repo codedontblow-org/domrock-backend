@@ -1,4 +1,4 @@
-package br.com.camplana.dto;
+package br.com.camplana.dto.usuario;
 
 import br.com.camplana.entity.Perfil;
 import jakarta.validation.constraints.Email;
@@ -17,10 +17,9 @@ public record UsuarioPostBody(
         String email,
 
         @NotBlank(message = "Senha é obrigatória")
-        @Size(min = 6, max = 255, message = "Senha deve ter entre 6 e 255 caracteres")
+        @Size(min = 6, max = 72, message = "Senha deve ter entre 6 e 72 caracteres")
         String senha,
 
         @NotNull(message = "Perfil é obrigatório")
         Perfil perfil
-) {
-}
+) {}

@@ -3,11 +3,7 @@ package br.com.camplana.service;
 import br.com.camplana.entity.Usuario;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
 
-import java.util.List;
-
-@Service
 public interface UsuarioService {
 
     Usuario create(Usuario usuario);
@@ -16,7 +12,9 @@ public interface UsuarioService {
 
     Page<Usuario> listAll(Pageable pageable);
 
-    Usuario update(Usuario usuario);
+    Usuario update(Usuario usuario, Integer adminLogadoId);
 
-    void remove(Integer id);
+    Usuario desativar(Integer id, Integer adminLogadoId);
+
+    Usuario reativar(Integer id);
 }
