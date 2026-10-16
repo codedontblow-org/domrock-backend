@@ -12,5 +12,9 @@ public interface UsuarioService {
 
     Page<Usuario> listAll(Pageable pageable);
 
-    Usuario update(Usuario usuario);
+    Usuario update(Usuario usuario, Integer adminLogadoId);
+
+    Usuario desativar(Integer id, Integer adminLogadoId);
+
+    Usuario reativar(Integer id);
 }

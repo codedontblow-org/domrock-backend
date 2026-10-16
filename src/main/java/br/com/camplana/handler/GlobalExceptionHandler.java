@@ -27,6 +27,11 @@ public class GlobalExceptionHandler {
         return erro(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErroResponse> handleConflict(ConflictException ex, HttpServletRequest req) {
+        return erro(HttpStatus.CONFLICT, ex.getMessage(), req);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErroResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
                                                                      HttpServletRequest req) {

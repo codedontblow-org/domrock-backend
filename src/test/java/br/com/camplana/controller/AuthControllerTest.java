@@ -62,7 +62,7 @@ class AuthControllerTest {
 
     @Test
     void loginComSenhaCertaDevolveTokenEPerfil() throws Exception {
-        when(usuarioRepository.findByEmail(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
+        when(usuarioRepository.findByEmailIgnoreCase(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
 
         login(gabriela.getEmail(), SENHA)
                 .andExpect(status().isOk())
@@ -75,7 +75,7 @@ class AuthControllerTest {
 
     @Test
     void senhaErradaDevolve401Generico() throws Exception {
-        when(usuarioRepository.findByEmail(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
+        when(usuarioRepository.findByEmailIgnoreCase(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
 
         login(gabriela.getEmail(), "errada")
                 .andExpect(status().isUnauthorized())
@@ -85,7 +85,7 @@ class AuthControllerTest {
 
     @Test
     void emailInexistenteDevolveOMesmo401() throws Exception {
-        when(usuarioRepository.findByEmail("naoexiste@camplana.com.br")).thenReturn(Optional.empty());
+        when(usuarioRepository.findByEmailIgnoreCase("naoexiste@camplana.com.br")).thenReturn(Optional.empty());
 
         login("naoexiste@camplana.com.br", SENHA)
                 .andExpect(status().isUnauthorized())
@@ -95,7 +95,7 @@ class AuthControllerTest {
     @Test
     void usuarioInativoDevolveOMesmo401() throws Exception {
         gabriela.setAtivo(false);
-        when(usuarioRepository.findByEmail(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
+        when(usuarioRepository.findByEmailIgnoreCase(gabriela.getEmail())).thenReturn(Optional.of(gabriela));
 
         login(gabriela.getEmail(), SENHA)
                 .andExpect(status().isUnauthorized())

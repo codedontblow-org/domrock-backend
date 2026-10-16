@@ -66,7 +66,7 @@ public class SecurityFilter extends OncePerRequestFilter {
         }
         try {
             String email = jwtService.getSubject(authorization.substring(7));
-            return usuarioRepository.findByEmail(email);
+            return usuarioRepository.findByEmailIgnoreCase(email);
         } catch (RuntimeException e) {
             return Optional.empty();
         }

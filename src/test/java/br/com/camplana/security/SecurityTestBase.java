@@ -62,7 +62,7 @@ public abstract class SecurityTestBase {
         u.setSenha("hash-irrelevante");
         u.setPerfil(perfil);
         u.setAtivo(true);
-        when(usuarioRepository.findByEmail(email)).thenReturn(Optional.of(u));
+        when(usuarioRepository.findByEmailIgnoreCase(email)).thenReturn(Optional.of(u));
         when(usuarioRepository.findById(id)).thenReturn(Optional.of(u));
         return u;
     }

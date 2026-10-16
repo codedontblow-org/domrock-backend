@@ -66,7 +66,7 @@ class LanaControllersTests {
         sergio.setEmail("sergio@camplana.com.br");
         sergio.setPerfil(Perfil.SUPERVISOR);
         sergio.setAtivo(true);
-        given(usuarioRepository.findByEmail(sergio.getEmail())).willReturn(Optional.of(sergio));
+        given(usuarioRepository.findByEmailIgnoreCase(sergio.getEmail())).willReturn(Optional.of(sergio));
         autorizacao = "Bearer " + jwtService.gerarToken(sergio, jwtService.getExpirationDate());
     }
 

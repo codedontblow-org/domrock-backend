@@ -66,7 +66,7 @@ class SecurityTokenTest extends SecurityTestBase {
     @Test
     void tokenDeUsuarioQueNaoExisteMaisRecebe401() throws Exception {
         String token = bearer(ana);
-        org.mockito.Mockito.when(usuarioRepository.findByEmail(ana.getEmail()))
+        org.mockito.Mockito.when(usuarioRepository.findByEmailIgnoreCase(ana.getEmail()))
                 .thenReturn(java.util.Optional.empty());
         mockMvc.perform(get("/api/usuarios").header("Authorization", token))
                 .andExpect(status().isUnauthorized());
