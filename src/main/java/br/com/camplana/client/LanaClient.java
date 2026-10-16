@@ -1,56 +1,47 @@
 package br.com.camplana.client;
 
-import br.com.camplana.exception.LanaIndisponivelException;
-import br.com.camplana.exception.LanaRespostaException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import br.com.camplana.service.IaGrpcClientService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
-
-import java.util.function.Supplier;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Cliente HTTP da Lana (agente de IA em FastAPI). O Spring é a porta única do front;
- * o JSON do contrato passa intacto, sem ser duplicado em classes Java.
- * Ex.: lanaClient.invocarAgente(Map.of("chat_id", "c1", "message", "oi"))
+ * Cliente gRPC da Lana (agente de IA). O Spring é a porta única do front;
+ * as chamadas são delegadas para o microsserviço Python via gRPC.
  */
 @Component
+@RequiredArgsConstructor
 public class LanaClient {
 
-    private final RestClient restClient;
-
-    public LanaClient(RestClient.Builder builder, @Value("${lana.url}") String lanaUrl) {
-        // Timeouts em application.properties (spring.http.clients.*).
-        this.restClient = builder.baseUrl(lanaUrl).build();
-    }
+    private final IaGrpcClientService iaGrpcClientService;
+    private final ObjectMapper objectMapper;
 
     public JsonNode invocarAgente(Object corpo) {
-        return postar("/agent/invoke", corpo);
+        try {
+            // Converte o corpo recebido do controller para JsonNode para extrair os campos
+            JsonNode node = objectMapper.valueToTree(corpo);
+
+            String prompt = node.hasNonNull("message") ? node.get("message").asString() : "";
+            String chatId = node.hasNonNull("chat_id") ? node.get("chat_id").asString() : "default";
+
+            String respostaIa = iaGrpcClientService.chamarAgenteLana(prompt, chatId);
+
+            // Mesmo contrato do endpoint HTTP antigo (AgentResponse) que o front espera
+            ObjectNode resposta = objectMapper.createObjectNode();
+            resposta.put("chat_id", chatId);
+            resposta.put("response", respostaIa);
+            resposta.putArray("events");   // vazio por enquanto (o proto ainda não carrega)
+            resposta.putNull("regra");     // idem
+            return resposta;
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao invocar a Lana via gRPC: " + e.getMessage(), e);
+        }
     }
 
     public JsonNode simular(Object corpo) {
-        return postar("/simulacao", corpo);
-    }
-
-    private JsonNode postar(String caminho, Object corpo) {
-        return tratarFalhas(caminho, () -> restClient.post()
-                .uri(caminho)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(corpo)
-                .retrieve()
-                .body(JsonNode.class));
-    }
-
-    private JsonNode tratarFalhas(String caminho, Supplier<JsonNode> chamada) {
-        try {
-            return chamada.get();
-        } catch (RestClientResponseException e) {
-            throw new LanaRespostaException(e.getStatusCode().value(), e.getResponseBodyAsString());
-        } catch (ResourceAccessException e) {
-            throw new LanaIndisponivelException("Lana indisponível em " + caminho + ": " + e.getMessage());
-        }
+        // Redireciona a simulação para o mesmo fluxo gRPC do agente
+        return invocarAgente(corpo);
     }
 }

@@ -14,8 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.domain.Pageable;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/usuario")
 @RequiredArgsConstructor
@@ -24,14 +22,14 @@ public class UsuarioController {
     private final UsuarioMapper usuarioMapper;
 
     @PostMapping
-    public ResponseEntity<UsuarioResponse> create(@Valid @RequestBody UsuarioPostBody body){
+    public ResponseEntity<UsuarioResponse> create(@Valid @RequestBody UsuarioPostBody body) {
         Usuario usuario = usuarioMapper.toEntity(body);
         Usuario savedUsuario = usuarioService.create(usuario);
         return ResponseEntity.status(HttpStatus.CREATED).body(usuarioMapper.toResponse(savedUsuario));
     }
 
     @GetMapping(path = "/{id}")
-    public ResponseEntity<UsuarioResponse> findById(@PathVariable Integer id){
+    public ResponseEntity<UsuarioResponse> findById(@PathVariable Integer id) {
         Usuario savedUsuario = usuarioService.findById(id);
         return ResponseEntity.status(HttpStatus.OK).body(usuarioMapper.toResponse(savedUsuario));
     }
@@ -46,8 +44,7 @@ public class UsuarioController {
     @PutMapping("/{id}")
     public ResponseEntity<UsuarioResponse> update(
             @PathVariable Integer id,
-            @Valid @RequestBody UsuarioPutBody body
-    ) {
+            @Valid @RequestBody UsuarioPutBody body) {
         Usuario usuario = usuarioService.findById(id);
         usuarioMapper.updateEntity(usuario, body);
         Usuario updatedUsuario = usuarioService.update(usuario);
@@ -61,5 +58,3 @@ public class UsuarioController {
     }
 
 }
-
-
