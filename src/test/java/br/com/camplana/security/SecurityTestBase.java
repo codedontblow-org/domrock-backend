@@ -17,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
+import br.com.camplana.importacao.ImportacaoManagerService;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,7 @@ public abstract class SecurityTestBase {
     @MockitoBean protected UsuarioRepository usuarioRepository;
     @MockitoBean protected LanaClient lanaClient;
     @MockitoBean protected ImportacaoService importacaoService;
+    @MockitoBean protected ImportacaoManagerService managerService;
     @MockitoBean protected UsuarioService usuarioService;
     @MockitoBean protected UsuarioMapper usuarioMapper;
 

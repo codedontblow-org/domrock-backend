@@ -55,7 +55,7 @@ class SecurityPorPerfilTest extends SecurityTestBase {
     @Test void importacaoGerenteRecebe403SemExecutar() throws Exception {
         mockMvc.perform(importar().header("Authorization", bearer(gabriela)))
                 .andExpect(status().isForbidden());
-        org.mockito.Mockito.verifyNoInteractions(importacaoService);
+        org.mockito.Mockito.verifyNoInteractions(managerService);
     }
     @Test void importacaoAdminRecebe403() throws Exception {
         mockMvc.perform(importar().header("Authorization", bearer(ana)))
