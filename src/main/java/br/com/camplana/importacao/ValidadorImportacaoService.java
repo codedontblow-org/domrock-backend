@@ -2,8 +2,8 @@ package br.com.camplana.importacao;
 
 import br.com.camplana.dto.importacao.PendenciaImportacao;
 import org.springframework.stereotype.Service;
-import java.time.YearMonth;
 
+import java.time.YearMonth;
 import java.util.*;
 
 @Service
@@ -47,15 +47,22 @@ public class ValidadorImportacaoService {
             ));
         }
 
+        // Validação de Colunas Obrigatórias
         validarColunas(nomeRh, linhasRh, COLS_RH, pendencias);
         validarColunas(nomeVendas, linhasVendas, COLS_VENDAS, pendencias);
         if (linhasComissao != null && !linhasComissao.isEmpty()) {
             validarColunas(nomeComissao, linhasComissao, COLS_COMISSAO, pendencias);
         }
 
+        // Se faltar coluna ou planilha vazia, interrompe antes de checar dados
         if (pendencias.stream().anyMatch(p -> PendenciaImportacao.IMPEDITIVO.equalsIgnoreCase(p.severidade()))) {
             return new ResultadoValidacao(pendencias, false);
         }
+
+        // Validação de Tipos de Dados e Datas nas Células
+        validarTiposEDatasRh(nomeRh, linhasRh, pendencias);
+        validarTiposEDatasVendas(nomeVendas, linhasVendas, pendencias);
+        validarTiposEDatasComissao(nomeComissao, linhasComissao, pendencias);
 
         Set<String> matriculasRh = new HashSet<>();
         Set<String> paresMarcaCargoRh = new HashSet<>();
@@ -169,6 +176,93 @@ public class ValidadorImportacaoService {
                         PendenciaImportacao.IMPEDITIVO
                 ));
             }
+        }
+    }
+
+    private void validarTiposEDatasRh(String nomeArquivo, List<Map<String, String>> linhasRh, List<PendenciaImportacao> pendencias) {
+        if (linhasRh == null) return;
+        for (int i = 0; i < linhasRh.size(); i++) {
+            Map<String, String> linha = linhasRh.get(i);
+            int numLinha = i + 2;
+
+            String dataRef = linha.get("Data_Ref");
+            if (dataRef != null && !dataRef.isBlank() && !isDataValida(dataRef)) {
+                pendencias.add(new PendenciaImportacao(
+                        nomeArquivo, numLinha, "Data_Ref",
+                        "Data de referência inválida: '" + dataRef + "'. Formato esperado: YYYY-MM-DD.",
+                        PendenciaImportacao.IMPEDITIVO
+                ));
+            }
+
+            String dataAdmiss = linha.get("Data_Admiss");
+            if (dataAdmiss != null && !dataAdmiss.isBlank() && !isDataValida(dataAdmiss)) {
+                pendencias.add(new PendenciaImportacao(
+                        nomeArquivo, numLinha, "Data_Admiss",
+                        "Data de admissão inválida: '" + dataAdmiss + "'. Formato esperado: YYYY-MM-DD.",
+                        PendenciaImportacao.IMPEDITIVO
+                ));
+            }
+        }
+    }
+
+    private void validarTiposEDatasVendas(String nomeArquivo, List<Map<String, String>> linhasVendas, List<PendenciaImportacao> pendencias) {
+        if (linhasVendas == null) return;
+        for (int i = 0; i < linhasVendas.size(); i++) {
+            Map<String, String> linha = linhasVendas.get(i);
+            int numLinha = i + 2;
+
+            String dateRef = linha.get("Date_Ref");
+            if (dateRef != null && !dateRef.isBlank() && !isDataValida(dateRef)) {
+                pendencias.add(new PendenciaImportacao(
+                        nomeArquivo, numLinha, "Date_Ref",
+                        "Data de referência inválida: '" + dateRef + "'. Formato esperado: YYYY-MM-DD.",
+                        PendenciaImportacao.IMPEDITIVO
+                ));
+            }
+
+            String vlrVenda = linha.get("Vlr _Venda");
+            if (vlrVenda != null && !vlrVenda.isBlank() && !isNumeroValido(vlrVenda)) {
+                pendencias.add(new PendenciaImportacao(
+                        nomeArquivo, numLinha, "Vlr _Venda",
+                        "Valor de venda numérico inválido: '" + vlrVenda + "'.",
+                        PendenciaImportacao.IMPEDITIVO
+                ));
+            }
+        }
+    }
+
+    private void validarTiposEDatasComissao(String nomeArquivo, List<Map<String, String>> linhasComissao, List<PendenciaImportacao> pendencias) {
+        if (linhasComissao == null) return;
+        for (int i = 0; i < linhasComissao.size(); i++) {
+            Map<String, String> linha = linhasComissao.get(i);
+            int numLinha = i + 2;
+
+            String pctComiss = linha.get("%_Comiss");
+            if (pctComiss != null && !pctComiss.isBlank() && !isNumeroValido(pctComiss)) {
+                pendencias.add(new PendenciaImportacao(
+                        nomeArquivo, numLinha, "%_Comiss",
+                        "Percentual de comissão numérico inválido: '" + pctComiss + "'.",
+                        PendenciaImportacao.IMPEDITIVO
+                ));
+            }
+        }
+    }
+
+    private boolean isDataValida(String valor) {
+        try {
+            java.time.LocalDate.parse(valor.trim());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isNumeroValido(String valor) {
+        try {
+            new java.math.BigDecimal(valor.trim().replace(",", "."));
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 }

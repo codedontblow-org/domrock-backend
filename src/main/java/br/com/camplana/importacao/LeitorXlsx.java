@@ -95,20 +95,27 @@ public class LeitorXlsx {
 
         return switch (cell.getCellType()) {
             case STRING -> cell.getStringCellValue().trim();
-            case NUMERIC -> {
-                if (DateUtil.isCellDateFormatted(cell)) {
-                    yield dataFormatter.formatCellValue(cell).trim();
-                }
-                double num = cell.getNumericCellValue();
-                if (num == Math.floor(num) && !Double.isInfinite(num)) {
-                    yield String.valueOf((long) num);
-                }
-                yield String.valueOf(num);
-            }
+            case NUMERIC -> formatarNumericoOuData(cell);
             case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
-            case FORMULA -> dataFormatter.formatCellValue(cell).trim();
+            case FORMULA -> switch (cell.getCachedFormulaResultType()) {
+                case STRING -> cell.getStringCellValue().trim();
+                case NUMERIC -> formatarNumericoOuData(cell);
+                case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+                default -> "";
+            };
             default -> "";
         };
+    }
+
+    private String formatarNumericoOuData(Cell cell) {
+        if (DateUtil.isCellDateFormatted(cell)) {
+            return cell.getLocalDateTimeCellValue()
+                    .toLocalDate()
+                    .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+        }
+        return java.math.BigDecimal.valueOf(cell.getNumericCellValue())
+                .stripTrailingZeros()
+                .toPlainString();
     }
 
     private boolean linhaVazia(Row row) {
