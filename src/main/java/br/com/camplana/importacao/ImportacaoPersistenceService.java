@@ -9,10 +9,14 @@ import br.com.camplana.service.ImportadorRhService;
 import br.com.camplana.service.ImportadorVendasService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -81,9 +85,13 @@ public class ImportacaoPersistenceService {
         job.setPendencias(toJson(Collections.emptyList()));
         job.setTotalLinhas(0);
         job.setLinhasImportadas(0);
-        job.setCriadaEm(LocalDateTime.now());
+        job.setCriadaEm(LocalDateTime.now(ZoneOffset.UTC));
 
-        return importacaoRepository.save(job);
+        try {
+            return importacaoRepository.saveAndFlush(job);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe uma importação em andamento.");
+        }
     }
 
     @Transactional
@@ -108,7 +116,7 @@ public class ImportacaoPersistenceService {
             job.setLinhasImportadas(linhasImportadas);
             job.setTotais(toJson(totais));
             job.setPendencias(toJson(pendencias));
-            job.setConcluidaEm(LocalDateTime.now());
+            job.setConcluidaEm(LocalDateTime.now(ZoneOffset.UTC));
             importacaoRepository.save(job);
         }
     }
@@ -119,11 +127,10 @@ public class ImportacaoPersistenceService {
         if (job != null) {
             job.setStatus("FALHA");
             job.setPendencias(toJson(List.of(new PendenciaImportacao("SISTEMA", 0, "GERAL", mensagemErro, PendenciaImportacao.IMPEDITIVO))));
-            job.setConcluidaEm(LocalDateTime.now());
+            job.setConcluidaEm(LocalDateTime.now(ZoneOffset.UTC));
             importacaoRepository.save(job);
         }
     }
-
 
     private String toJson(Object obj) {
         try {

@@ -19,3 +19,5 @@ CREATE INDEX idx_importacao_status ON importacao (status);
 
 GRANT SELECT ON importacao TO lana_leitura;
 GRANT USAGE, SELECT ON SEQUENCE importacao_id_seq TO lana_leitura;
+
+CREATE UNIQUE INDEX uk_importacao_em_andamento ON importacao (status) WHERE status = 'PROCESSANDO';
