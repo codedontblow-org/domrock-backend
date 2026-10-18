@@ -28,10 +28,9 @@ public class ImportacaoController {
     @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<JobCriadoResponse> criarJob(
             @RequestParam("arquivos") List<MultipartFile> arquivos,
-            @RequestParam(value = "modoCargaInicial", defaultValue = "false") boolean modoCargaInicial,
             @AuthenticationPrincipal Usuario usuario
     ) {
-        JobCriadoResponse response = managerService.iniciarImportacao(arquivos, modoCargaInicial, usuario);
+        JobCriadoResponse response = managerService.iniciarImportacao(arquivos, usuario);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 

@@ -33,16 +33,15 @@ public class ImportacaoManagerService {
     public ImportacaoManagerService(
             ImportacaoRepository importacaoRepository,
             ImportacaoPersistenceService persistenceService,
-            ImportacaoJobService jobService,
-            ObjectMapper objectMapper
+            ImportacaoJobService jobService
     ) {
         this.importacaoRepository = importacaoRepository;
         this.persistenceService = persistenceService;
         this.jobService = jobService;
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper();
     }
 
-    public JobCriadoResponse iniciarImportacao(List<MultipartFile> arquivos, boolean modoCargaInicial, Usuario usuario) {
+    public JobCriadoResponse iniciarImportacao(List<MultipartFile> arquivos, Usuario usuario) {
         if (importacaoRepository.existsByStatus("PROCESSANDO")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe uma importação em andamento.");
         }
@@ -62,13 +61,11 @@ public class ImportacaoManagerService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Arquivo enviado sem nome válido.");
             }
 
-            // Validação 1: Extensão obrigatória .xlsx
             if (!nomeOriginal.toLowerCase().endsWith(".xlsx")) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                     "Formato de arquivo inválido: " + nomeOriginal + ". Apenas planilhas .xlsx são permitidas.");
             }
 
-            // Validação 2: Bloqueio de duplicados
             if (nomesVerificados.contains(nomeOriginal.toLowerCase())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                     "Arquivo duplicado detectado no envio: " + nomeOriginal);
@@ -85,7 +82,7 @@ public class ImportacaoManagerService {
         }
 
         Importacao job = persistenceService.criarJobInicial(nomesArquivos, usuario);
-        jobService.processarImportacaoAsync(job.getId(), arquivosBytes, modoCargaInicial);
+        jobService.processarImportacaoAsync(job.getId(), arquivosBytes);
 
         return new JobCriadoResponse(job.getId(), job.getStatus());
     }
