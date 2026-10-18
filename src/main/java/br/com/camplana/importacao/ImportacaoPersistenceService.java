@@ -4,6 +4,9 @@ import br.com.camplana.dto.importacao.PendenciaImportacao;
 import br.com.camplana.entity.Importacao;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.repository.ImportacaoRepository;
+import br.com.camplana.service.ImportadorComissaoService;
+import br.com.camplana.service.ImportadorRhService;
+import br.com.camplana.service.ImportadorVendasService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -11,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,10 +23,52 @@ public class ImportacaoPersistenceService {
 
     private final ImportacaoRepository importacaoRepository;
     private final ObjectMapper objectMapper;
+    private final ImportadorRhService importadorRh;
+    private final ImportadorVendasService importadorVendas;
+    private final ImportadorComissaoService importadorComissao;
 
-    public ImportacaoPersistenceService(ImportacaoRepository importacaoRepository) {
+    public ImportacaoPersistenceService(
+            ImportacaoRepository importacaoRepository,
+            ImportadorRhService importadorRh,
+            ImportadorVendasService importadorVendas,
+            ImportadorComissaoService importadorComissao
+    ) {
         this.importacaoRepository = importacaoRepository;
+        this.importadorRh = importadorRh;
         this.objectMapper = new ObjectMapper();
+        this.importadorVendas = importadorVendas;
+        this.importadorComissao = importadorComissao;
+    }
+
+    public record ResultadoCarga(int totalGravado, Map<String, Integer> totaisPorTipo) {}
+
+    @Transactional
+    public ResultadoCarga executarCargaAtomica(
+            String nomeRh, List<Map<String, String>> linhasRh,
+            String nomeVendas, List<Map<String, String>> linhasVendas,
+            List<Map<String, String>> linhasComissao
+    ) {
+        int gravadasRh = 0;
+        if (linhasRh != null && !linhasRh.isEmpty()) {
+            gravadasRh = importadorRh.importar(nomeRh, linhasRh);
+        }
+
+        int gravadasVendas = 0;
+        if (linhasVendas != null && !linhasVendas.isEmpty()) {
+            gravadasVendas = importadorVendas.importar(nomeVendas, linhasVendas);
+        }
+
+        int gravadasComissao = 0;
+        if (linhasComissao != null && !linhasComissao.isEmpty()) {
+            gravadasComissao = importadorComissao.importar(linhasComissao);
+        }
+
+        Map<String, Integer> totais = new HashMap<>();
+        totais.put("RH", gravadasRh);
+        totais.put("VENDAS", gravadasVendas);
+        totais.put("COMISSAO", gravadasComissao);
+
+        return new ResultadoCarga(gravadasRh + gravadasVendas + gravadasComissao, totais);
     }
 
     @Transactional
@@ -38,17 +84,6 @@ public class ImportacaoPersistenceService {
         job.setCriadaEm(LocalDateTime.now());
 
         return importacaoRepository.save(job);
-    }
-
-    @Transactional
-    public void atualizarProgresso(Long jobId, int linhasImportadas, int totalLinhas, Map<String, Integer> totais) {
-        Importacao job = importacaoRepository.findById(jobId).orElse(null);
-        if (job != null) {
-            job.setLinhasImportadas(linhasImportadas);
-            job.setTotalLinhas(totalLinhas);
-            job.setTotais(toJson(totais));
-            importacaoRepository.save(job);
-        }
     }
 
     @Transactional
@@ -88,6 +123,7 @@ public class ImportacaoPersistenceService {
             importacaoRepository.save(job);
         }
     }
+
 
     private String toJson(Object obj) {
         try {
