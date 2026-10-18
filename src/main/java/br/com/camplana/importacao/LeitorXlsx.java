@@ -48,11 +48,17 @@ public class LeitorXlsx {
                 return linhas;
             }
 
-            // Linha 0: Cabeçalho
+            // Linha 0 Cabeçalho mapeando o índice físico da coluna para o nome
             Row headerRow = rowIterator.next();
-            List<String> cabecalhos = extrairCabecalhos(headerRow);
+            Map<Integer, String> colunaParaHeader = new LinkedHashMap<>();
+            for (Cell c : headerRow) {
+                String texto = dataFormatter.formatCellValue(c).trim();
+                if (!texto.isBlank()) {
+                    colunaParaHeader.put(c.getColumnIndex(), texto);
+                }
+            }
 
-            if (cabecalhos.isEmpty()) {
+            if (colunaParaHeader.isEmpty()) {
                 return linhas;
             }
 
@@ -64,28 +70,15 @@ public class LeitorXlsx {
                 }
 
                 Map<String, String> linhaDados = new LinkedHashMap<>();
-                for (int i = 0; i < cabecalhos.size(); i++) {
-                    String coluna = cabecalhos.get(i);
-                    Cell cell = row.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                    String valor = formatarValorCelula(cell);
-                    linhaDados.put(coluna, valor);
+                for (Map.Entry<Integer, String> e : colunaParaHeader.entrySet()) {
+                    Cell cell = row.getCell(e.getKey(), Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                    linhaDados.put(e.getValue(), formatarValorCelula(cell));
                 }
                 linhas.add(linhaDados);
             }
         }
 
         return linhas;
-    }
-
-    private List<String> extrairCabecalhos(Row headerRow) {
-        List<String> cabecalhos = new ArrayList<>();
-        for (Cell cell : headerRow) {
-            String valor = dataFormatter.formatCellValue(cell);
-            if (valor != null && !valor.trim().isBlank()) {
-                cabecalhos.add(valor.trim());
-            }
-        }
-        return cabecalhos;
     }
 
     private String formatarValorCelula(Cell cell) {

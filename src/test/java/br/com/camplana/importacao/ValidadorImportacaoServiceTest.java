@@ -187,4 +187,126 @@ class ValidadorImportacaoServiceTest {
                 .anyMatch(p -> "Cod_Cargo".equals(p.campo()) && PendenciaImportacao.IMPEDITIVO.equals(p.severidade()));
         assertTrue(semCargo);
     }
+
+    @Test
+    @DisplayName("Deve gerar IMPEDITIVO se Data_Admiss não estiver no formato YYYY-MM-DD")
+    void deveGerarImpeditivoParaDataAdmissaoInvalida() {
+        Map<String, String> rh = criarLinhaRh("MATRIC-001", "M01", "C01");
+        rh.put("Data_Admiss", "01/10/2025");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(rh), List.of(criarLinhaVendas("MATRIC-001")), List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(res.temImpeditivo());
+        assertTrue(temImpeditivoEm(res, "Data_Admiss", 2));
+    }
+ 
+    @Test
+    @DisplayName("Deve gerar IMPEDITIVO se Data_Ref do RH for inválida")
+    void deveGerarImpeditivoParaDataRefDoRhInvalida() {
+        Map<String, String> rh = criarLinhaRh("MATRIC-001", "M01", "C01");
+        rh.put("Data_Ref", "2025/10/01");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(rh), List.of(criarLinhaVendas("MATRIC-001")), List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(temImpeditivoEm(res, "Data_Ref", 2));
+    }
+ 
+    @Test
+    @DisplayName("Deve gerar IMPEDITIVO se Date_Ref de Vendas for inválida")
+    void deveGerarImpeditivoParaDateRefDeVendasInvalida() {
+        Map<String, String> venda = criarLinhaVendas("MATRIC-001");
+        venda.put("Date_Ref", "15/10/2025");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(criarLinhaRh("MATRIC-001", "M01", "C01")), List.of(venda), List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(temImpeditivoEm(res, "Date_Ref", 2));
+    }
+ 
+    @Test
+    @DisplayName("Deve gerar IMPEDITIVO se o valor da venda não for numérico")
+    void deveGerarImpeditivoParaValorDeVendaNaoNumerico() {
+        Map<String, String> venda = criarLinhaVendas("MATRIC-001");
+        venda.put("Vlr _Venda", "abc");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(criarLinhaRh("MATRIC-001", "M01", "C01")), List.of(venda), List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(temImpeditivoEm(res, "Vlr _Venda", 2));
+    }
+ 
+    @Test
+    @DisplayName("Deve gerar IMPEDITIVO se o percentual de comissão não for numérico")
+    void deveGerarImpeditivoParaPercentualDeComissaoNaoNumerico() {
+        Map<String, String> comissao = criarLinhaComissao("M01", "C01");
+        comissao.put("%_Comiss", "abc");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(criarLinhaRh("MATRIC-001", "M01", "C01")), List.of(criarLinhaVendas("MATRIC-001")), List.of(comissao));
+ 
+        assertTrue(temImpeditivoEm(res, "%_Comiss", 2));
+    }
+ 
+    @Test
+    @DisplayName("O número da linha do erro acompanha a posição na planilha (cabeçalho é a linha 1)")
+    void numeroDaLinhaDoErroAcompanhaAPosicao() {
+        Map<String, String> segundaLinha = criarLinhaRh("MATRIC-002", "M01", "C01");
+        segundaLinha.put("Data_Admiss", "ontem");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(criarLinhaRh("MATRIC-001", "M01", "C01"), segundaLinha),
+                List.of(criarLinhaVendas("MATRIC-001"), criarLinhaVendas("MATRIC-002")),
+                List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(temImpeditivoEm(res, "Data_Admiss", 3));
+        assertFalse(temImpeditivoEm(res, "Data_Admiss", 2));
+    }
+ 
+    @Test
+    @DisplayName("Todos os erros de tipo do lote são reportados, não só o primeiro")
+    void deveReportarTodosOsErrosDeTipoDoLote() {
+        Map<String, String> rh = criarLinhaRh("MATRIC-001", "M01", "C01");
+        rh.put("Data_Admiss", "ontem");
+        Map<String, String> venda = criarLinhaVendas("MATRIC-001");
+        venda.put("Vlr _Venda", "abc");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(rh), List.of(venda), List.of(criarLinhaComissao("M01", "C01")));
+ 
+        assertTrue(temImpeditivoEm(res, "Data_Admiss", 2));
+        assertTrue(temImpeditivoEm(res, "Vlr _Venda", 2));
+    }
+ 
+    @Test
+    @DisplayName("Datas ISO e números decimais válidos não geram pendência")
+    void formatosValidosNaoGeramPendencia() {
+        Map<String, String> venda = criarLinhaVendas("MATRIC-001");
+        venda.put("Vlr _Venda", "1234.5");
+        Map<String, String> comissao = criarLinhaComissao("M01", "C01");
+        comissao.put("%_Comiss", "0.0175");
+ 
+        ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
+                List.of(criarLinhaRh("MATRIC-001", "M01", "C01")), List.of(venda), List.of(comissao));
+ 
+        assertFalse(res.temImpeditivo());
+        assertTrue(res.pendencias().isEmpty());
+    }
+ 
+    private ValidadorImportacaoService.ResultadoValidacao validarOut25(
+            List<Map<String, String>> rh, List<Map<String, String>> vendas, List<Map<String, String>> comissao) {
+        return validador.validarLote(
+                "BASE RH_OUT25.xlsx", rh,
+                "BASE_VENDAS_OUT25.xlsx", vendas,
+                "BASE_COMMISS_FINAL.xlsx", comissao
+        );
+    }
+ 
+    private boolean temImpeditivoEm(ValidadorImportacaoService.ResultadoValidacao res, String campo, int linha) {
+        return res.pendencias().stream().anyMatch(p ->
+                campo.equals(p.campo())
+                        && p.linha() == linha
+                        && PendenciaImportacao.IMPEDITIVO.equals(p.severidade()));
+    }
 }
