@@ -1,56 +1,141 @@
 package br.com.camplana.client;
 
-import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.grpc.IAServiceGrpc;
+import br.com.camplana.grpc.InvokeRequest;
+import br.com.camplana.grpc.InvokeResponse;
+import br.com.camplana.service.IaGrpcClientService;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.Status;
+import io.grpc.stub.StreamObserver;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.restclient.test.autoconfigure.RestClientTest;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-@RestClientTest(components = LanaClient.class, properties = "lana.url=http://lana.test")
+/**
+ * Teste de integração do LanaClient com os beans reais (LanaClient + IaGrpcClientService)
+ * contra um servidor gRPC real e local, sem mocks e sem depender da Lana em Python.
+ */
+@SpringBootTest(
+        classes = {
+                LanaClient.class,
+                IaGrpcClientService.class,
+                LanaClientTests.JacksonTestConfig.class
+        },
+        properties = "grpc.lana.host=localhost")
 class LanaClientTests {
+
+    /** Último pedido recebido pelo servidor, para verificar o que o Java enviou. */
+    private static final AtomicReference<InvokeRequest> ULTIMO_PEDIDO = new AtomicReference<>();
+
+    private static Server servidorGrpc;
+
+    @Configuration
+    static class JacksonTestConfig {
+        @Bean
+        ObjectMapper objectMapper() {
+            return JsonMapper.builder().build();
+        }
+    }
+
+    /** Implementação real (não é mock) do serviço da Lana, só para o teste. */
+    static class LanaFakeService extends IAServiceGrpc.IAServiceImplBase {
+        @Override
+        public void invokeAgent(InvokeRequest request, StreamObserver<InvokeResponse> observer) {
+            ULTIMO_PEDIDO.set(request);
+
+            if ("falhar".equals(request.getPrompt())) {
+                observer.onError(Status.INTERNAL.withDescription("erro simulado").asRuntimeException());
+                return;
+            }
+            observer.onNext(InvokeResponse.newBuilder()
+                    .setResposta("Resposta da Lana para: " + request.getPrompt())
+                    .build());
+            observer.onCompleted();
+        }
+    }
+
+    @BeforeAll
+    static void iniciarServidorGrpc() throws IOException {
+        // Porta 0 = o SO escolhe uma porta livre (evita conflito no CI)
+        servidorGrpc = ServerBuilder.forPort(0)
+                .addService(new LanaFakeService())
+                .build()
+                .start();
+    }
+
+    @AfterAll
+    static void pararServidorGrpc() throws InterruptedException {
+        if (servidorGrpc != null) {
+            servidorGrpc.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    /** Aponta o canal do IaGrpcClientService para o servidor local do teste. */
+    @DynamicPropertySource
+    static void propriedadesGrpc(DynamicPropertyRegistry registry) {
+        registry.add("grpc.lana.port", () -> servidorGrpc.getPort());
+    }
 
     @Autowired
     private LanaClient lanaClient;
 
-    @Autowired
-    private MockRestServiceServer servidorLana;
-
     @Test
     void invocarAgenteRepassaOCorpoEDevolveOJsonDaLana() {
-        servidorLana.expect(requestTo("http://lana.test/agent/invoke"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(jsonPath("$.chat_id").value("c1"))
-                .andRespond(withSuccess("{\"response\":\"oi\",\"regra\":null}", MediaType.APPLICATION_JSON));
+        JsonNode resultado = lanaClient.invocarAgente(
+                Map.of("message", "Quanto vendi em dezembro?", "chat_id", "chat-123"));
 
-        JsonNode resposta = lanaClient.invocarAgente(Map.of("chat_id", "c1", "message", "oi"));
+        // O que o Java enviou por gRPC
+        InvokeRequest enviado = ULTIMO_PEDIDO.get();
+        assertThat(enviado.getPrompt()).isEqualTo("Quanto vendi em dezembro?");
+        assertThat(enviado.getChatId()).isEqualTo("chat-123");
 
-        assertThat(resposta.path("response").asString()).isEqualTo("oi");
+        // O contrato devolvido ao front (AgentResponse)
+        assertThat(resultado.get("chat_id").asString()).isEqualTo("chat-123");
+        assertThat(resultado.get("response").asString())
+                .isEqualTo("Resposta da Lana para: Quanto vendi em dezembro?");
+        assertThat(resultado.get("events").isArray()).isTrue();
+        assertThat(resultado.get("events")).isEmpty();
+        assertThat(resultado.get("regra").isNull()).isTrue();
     }
 
     @Test
-    void simularPropagaStatusECorpoDoErroDaLana() {
-        String erro = "{\"etapa\":\"validacao\",\"mensagem\":\"Regra incompleta\"}";
-        servidorLana.expect(requestTo("http://lana.test/simulacao"))
-                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_CONTENT).body(erro).contentType(MediaType.APPLICATION_JSON));
+    void invocarAgenteUsaChatIdPadraoQuandoAusente() {
+        JsonNode resultado = lanaClient.invocarAgente(Map.of("message", "oi"));
 
-        assertThatThrownBy(() -> lanaClient.simular(Map.of("regra", Map.of())))
-                .isInstanceOfSatisfying(LanaRespostaException.class, e -> {
-                    assertThat(e.getStatus()).isEqualTo(422);
-                    assertThat(e.getCorpo()).isEqualTo(erro);
-                });
+        assertThat(ULTIMO_PEDIDO.get().getChatId()).isEqualTo("default");
+        assertThat(resultado.get("chat_id").asString()).isEqualTo("default");
+    }
+
+    @Test
+    void simularReaproveitaOFluxoGrpcDoAgente() {
+        JsonNode resultado = lanaClient.simular(Map.of("message", "simular", "chat_id", "chat-sim"));
+
+        assertThat(resultado.get("response").asString()).isEqualTo("Resposta da Lana para: simular");
+    }
+
+    @Test
+    void invocarAgenteEncapsulaFalhasDoServidorGrpc() {
+        assertThatThrownBy(() -> lanaClient.invocarAgente(Map.of("message", "falhar", "chat_id", "x")))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Erro ao invocar a Lana via gRPC")
+                .hasMessageContaining("INTERNAL");
     }
 }
