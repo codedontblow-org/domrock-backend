@@ -78,6 +78,27 @@ public class GlobalExceptionHandler {
                                 .body(details);
         }
 
+        // Login: e-mail inexistente, senha errada ou usuário inativo. Mensagem única de propósito.
+        // Veio com o login (PR #5) e tinha sumido no merge da develop (dd37477).
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<ExceptionDetails> handleCredenciais(
+                        AuthenticationException exception,
+                        HttpServletRequest request) {
+
+                log.warn("Falha de autenticação: {}", exception.getClass().getSimpleName());
+                ExceptionDetails details = ExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.UNAUTHORIZED.value())
+                                .error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+                                .message("E-mail ou senha inválidos")
+                                .path(request.getRequestURI())
+                                .build();
+
+                return ResponseEntity
+                                .status(HttpStatus.UNAUTHORIZED)
+                                .body(details);
+        }
+
         // Erro de negócio da Lana (ex.: 422 regra incompleta ou falha na geração do
         // código):
         // repassa status e corpo para o front mostrar a etapa e a mensagem ao usuário.
