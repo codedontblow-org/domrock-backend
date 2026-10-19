@@ -17,7 +17,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import jakarta.persistence.EntityManager;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = {
+		"api.security.token.secret=segredo-de-teste-com-mais-de-32-caracteres",
+		"spring.flyway.placeholders.lana_db_password=lana_leitura",
+		"lana.url=http://localhost:8000"
+})
 class DatabaseConnectionTests {
 
 	@Autowired
