@@ -11,50 +11,120 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import br.com.camplana.exception.BadRequestException;
+import br.com.camplana.exception.BadRequestExceptionDetails;
+import br.com.camplana.exception.LanaIndisponivelException;
+import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.exception.ValidationException;
+import br.com.camplana.exception.ValidationExceptionDetails;
+
 import java.time.LocalDateTime;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<ErroResponse> handleBadRequest(BadRequestException ex, HttpServletRequest req) {
-        return erro(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
-    }
+        @ExceptionHandler(BadRequestException.class)
+        public ResponseEntity<BadRequestExceptionDetails> handleBadRequestException(
+                        BadRequestException exception,
+                        HttpServletRequest request) {
 
-    @ExceptionHandler(ValidationException.class)
-    public ResponseEntity<ErroResponse> handleValidation(ValidationException ex, HttpServletRequest req) {
-        return erro(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
-    }
+                BadRequestExceptionDetails details = BadRequestExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(exception.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErroResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
-                                                                     HttpServletRequest req) {
-        return erro(HttpStatus.BAD_REQUEST, "Erro de validação.", req);
-    }
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
 
-    // Login: e-mail inexistente, senha errada ou usuário inativo. Mensagem única de propósito.
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ErroResponse> handleCredenciais(AuthenticationException ex, HttpServletRequest req) {
-        log.warn("Falha de autenticação: {}", ex.getClass().getSimpleName());
-        return erro(HttpStatus.UNAUTHORIZED, "E-mail ou senha inválidos", req);
-    }
+        @ExceptionHandler(ValidationException.class)
+        public ResponseEntity<ValidationExceptionDetails> handleValidationException(
+                        ValidationException exception,
+                        HttpServletRequest request) {
 
-    @ExceptionHandler(LanaRespostaException.class)
-    public ResponseEntity<String> handleLanaResposta(LanaRespostaException ex) {
-        return ResponseEntity
-                .status(ex.getStatus())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(ex.getCorpo());
-    }
+                ValidationExceptionDetails details = ValidationExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(exception.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
 
-    @ExceptionHandler(LanaIndisponivelException.class)
-    public ResponseEntity<ErroResponse> handleLanaIndisponivel(LanaIndisponivelException ex,
-                                                               HttpServletRequest req) {
-        return erro(HttpStatus.BAD_GATEWAY, ex.getMessage(), req);
-    }
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
 
-    private ResponseEntity<ErroResponse> erro(HttpStatus status, String message, HttpServletRequest req) {
-        return ResponseEntity.status(status).body(ErroResponse.of(status, message, req.getRequestURI()));
-    }
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ValidationExceptionDetails> handleMethodArgumentNotValid(
+                        MethodArgumentNotValidException exception,
+                        HttpServletRequest request) {
+
+                ValidationExceptionDetails details = ValidationExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message("Erro de validação.")
+                                .path(request.getRequestURI())
+                                .build();
+
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(details);
+        }
+
+        // Login: e-mail inexistente, senha errada ou usuário inativo. Mensagem única de propósito.
+        // Veio com o login (PR #5) e tinha sumido no merge da develop (dd37477).
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<ExceptionDetails> handleCredenciais(
+                        AuthenticationException exception,
+                        HttpServletRequest request) {
+
+                log.warn("Falha de autenticação: {}", exception.getClass().getSimpleName());
+                ExceptionDetails details = ExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.UNAUTHORIZED.value())
+                                .error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+                                .message("E-mail ou senha inválidos")
+                                .path(request.getRequestURI())
+                                .build();
+
+                return ResponseEntity
+                                .status(HttpStatus.UNAUTHORIZED)
+                                .body(details);
+        }
+
+        // Erro de negócio da Lana (ex.: 422 regra incompleta ou falha na geração do
+        // código):
+        // repassa status e corpo para o front mostrar a etapa e a mensagem ao usuário.
+        @ExceptionHandler(LanaRespostaException.class)
+        public ResponseEntity<String> handleLanaResposta(LanaRespostaException exception) {
+                return ResponseEntity
+                                .status(exception.getStatus())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(exception.getCorpo());
+        }
+
+        @ExceptionHandler(LanaIndisponivelException.class)
+        public ResponseEntity<BadRequestExceptionDetails> handleLanaIndisponivel(
+                        LanaIndisponivelException exception,
+                        HttpServletRequest request) {
+
+                BadRequestExceptionDetails details = BadRequestExceptionDetails.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_GATEWAY.value())
+                                .error(HttpStatus.BAD_GATEWAY.getReasonPhrase())
+                                .message(exception.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
+
+                return ResponseEntity
+                                .status(HttpStatus.BAD_GATEWAY)
+                                .body(details);
+        }
 }

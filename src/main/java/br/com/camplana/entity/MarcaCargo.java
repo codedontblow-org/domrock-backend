@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 public class MarcaCargo {
 
     @EmbeddedId
-    private MarcaCargoId id = new MarcaCargoId();
+    private MarcaCargoId id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId("marcaId")
