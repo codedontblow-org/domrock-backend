@@ -17,7 +17,7 @@
 ## Passo a passo:
 1. **Clone o repositório**:
 ```bash
-git clone https://github.com/CodeDontBlow/domrock-backend.git
+git clone https://github.com/codedontblow-org/domrock-backend.git
 cd domrock-backend
 
 ```
@@ -29,28 +29,25 @@ cd domrock-backend
 
 4. Aguarde o build automático do ambiente isolado.
 
-5. Abra o terminal integrado do VS Code (Ctrl + ') e execute:
+5. Abra o terminal integrado do VS Code (Ctrl + ') e execute (no Dev Container o banco é o serviço `db`):
 
 ```bash
-./mvnw spring-boot:run
+DB_URL=jdbc:postgresql://db:5432/postgres ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 ## Opção 2: Execução Local (Sem Dev Container)
 
-2. Suba o banco PostgreSQL via Docker:
+2. Suba o banco PostgreSQL pelo `docker-compose.yml` do repositório (cria o banco `camplana` na porta 5432):
 ```bash
-docker run --name postgres-camplana \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_DB=postgres \
-  -p 5432:5432 \
-  -d postgres:17
+docker compose up -d
 ```
 
-3. Execute a aplicação via Maven Wrapper:
+Se a porta 5432 já estiver em uso: `POSTGRES_HOST_PORT=5433 docker compose up -d` e `export DB_URL=jdbc:postgresql://localhost:5433/camplana`.
+
+3. Execute a aplicação via Maven Wrapper, com o profile `dev` (traz os padrões de desenvolvimento; sem ele, é preciso definir `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `LANA_URL` e `LANA_DB_PASSWORD`):
 
 ```bash
-./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 ## Endpoints de Verificação
@@ -58,4 +55,12 @@ Após subir a aplicação por qualquer uma das opções, você poderá acessar:
 
 > API Base: http://localhost:8080
 
-> Spring Boot Actuator: http://localhost:8080/actuator
+Para conferir, faça login com um dos usuários da demonstração (senha `123456`; lista no README):
+
+```bash
+curl -i -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"gabriela@camplana.com.br","senha":"123456"}'
+```
+
+A resposta `200` traz o `token`, que as outras rotas pedem no header `Authorization: Bearer <token>`.
