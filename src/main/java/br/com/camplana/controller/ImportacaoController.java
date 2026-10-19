@@ -7,13 +7,13 @@ import br.com.camplana.entity.Usuario;
 import br.com.camplana.importacao.ImportacaoManagerService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+// So Supervisor: a regra fica na matriz do SecurityConfig (/api/importacao/**), unico lugar das permissoes.
 @RestController
 @RequestMapping("/api/importacao")
 public class ImportacaoController {
@@ -25,7 +25,6 @@ public class ImportacaoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<JobCriadoResponse> criarJob(
             @RequestParam("arquivos") List<MultipartFile> arquivos,
             @AuthenticationPrincipal Usuario usuario
@@ -35,13 +34,11 @@ public class ImportacaoController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<JobStatusResponse> buscarJob(@PathVariable Long id) {
         return ResponseEntity.ok(managerService.buscarPorId(id));
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('SUPERVISOR')")
     public ResponseEntity<List<HistoricoImportacaoResponse>> listarHistorico() {
         return ResponseEntity.ok(managerService.listarHistorico());
     }

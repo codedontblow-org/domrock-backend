@@ -14,6 +14,8 @@ public interface ImportacaoRepository extends JpaRepository<Importacao, Long> {
 
     boolean existsByStatus(String status);
 
+    List<Importacao> findByStatus(String status);
+
     @Query("SELECT i FROM Importacao i LEFT JOIN FETCH i.usuario WHERE i.id = :id")
     Optional<Importacao> findByIdWithUsuario(@Param("id") Long id);
 
