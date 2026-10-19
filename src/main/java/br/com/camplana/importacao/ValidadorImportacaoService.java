@@ -106,13 +106,17 @@ public class ValidadorImportacaoService {
                 String mat = matriculaVenda.trim();
                 matriculasComVenda.add(mat);
 
+                // AVISO e nao IMPEDITIVO (decisao do PO, 19/10): a base real tem 60 vendas assim em
+                // ago-dez/2025 (R$ 97.871,75) e, como impeditivo, so julho entrava. O ImportadorVendasService
+                // ja descarta a venda sem RH na competencia; o aviso so torna o descarte visivel.
                 if (!matriculasRh.contains(mat)) {
                     pendencias.add(new PendenciaImportacao(
                             "Cruzamento",
                             numLinha,
                             "Matricula",
-                            "matrícula não encontrada no RH da competência: " + mat,
-                            PendenciaImportacao.IMPEDITIVO
+                            "matrícula " + mat + " não encontrada no RH da competência; a venda de "
+                                    + v.get("Date_Ref") + " (R$ " + v.get("Vlr _Venda") + ") não será gravada",
+                            PendenciaImportacao.AVISO
                     ));
                 }
             }

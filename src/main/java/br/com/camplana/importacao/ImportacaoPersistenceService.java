@@ -7,13 +7,13 @@ import br.com.camplana.repository.ImportacaoRepository;
 import br.com.camplana.service.ImportadorComissaoService;
 import br.com.camplana.service.ImportadorRhService;
 import br.com.camplana.service.ImportadorVendasService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -35,14 +35,18 @@ public class ImportacaoPersistenceService {
             ImportacaoRepository importacaoRepository,
             ImportadorRhService importadorRh,
             ImportadorVendasService importadorVendas,
-            ImportadorComissaoService importadorComissao
+            ImportadorComissaoService importadorComissao,
+            ObjectMapper objectMapper
     ) {
         this.importacaoRepository = importacaoRepository;
         this.importadorRh = importadorRh;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
         this.importadorVendas = importadorVendas;
         this.importadorComissao = importadorComissao;
     }
+
+    static final String MOTIVO_INTERROMPIDA =
+            "Importação interrompida porque o backend reiniciou durante o processamento; envie as planilhas de novo.";
 
     public record ResultadoCarga(int totalGravado, Map<String, Integer> totaisPorTipo) {}
 
@@ -123,19 +127,34 @@ public class ImportacaoPersistenceService {
 
     @Transactional
     public void finalizarJobComErro(Long jobId, String mensagemErro) {
-        Importacao job = importacaoRepository.findById(jobId).orElse(null);
-        if (job != null) {
-            job.setStatus("FALHA");
-            job.setPendencias(toJson(List.of(new PendenciaImportacao("SISTEMA", 0, "GERAL", mensagemErro, PendenciaImportacao.IMPEDITIVO))));
-            job.setConcluidaEm(LocalDateTime.now(ZoneOffset.UTC));
-            importacaoRepository.save(job);
-        }
+        importacaoRepository.findById(jobId).ifPresent(job -> marcarFalha(job, mensagemErro));
+    }
+
+    /**
+     * Encerra como FALHA os jobs que ficaram PROCESSANDO porque o backend parou no meio da carga
+     * (o @Async morre com o processo). Sem isso, o indice uk_importacao_em_andamento devolveria
+     * 409 a toda importacao nova. Supoe uma unica instancia do backend, como no compose do projeto.
+     * Ex.: chamado na subida por EncerradorImportacoesInterrompidas.
+     */
+    @Transactional
+    public int encerrarJobsInterrompidos() {
+        List<Importacao> interrompidos = importacaoRepository.findByStatus("PROCESSANDO");
+        interrompidos.forEach(job -> marcarFalha(job, MOTIVO_INTERROMPIDA));
+        return interrompidos.size();
+    }
+
+    private void marcarFalha(Importacao job, String mensagemErro) {
+        job.setStatus("FALHA");
+        job.setErro(mensagemErro);
+        job.setPendencias(toJson(List.of(new PendenciaImportacao("SISTEMA", 0, "GERAL", mensagemErro, PendenciaImportacao.IMPEDITIVO))));
+        job.setConcluidaEm(LocalDateTime.now(ZoneOffset.UTC));
+        importacaoRepository.save(job);
     }
 
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return "[]";
         }
     }

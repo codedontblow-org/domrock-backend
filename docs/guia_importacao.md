@@ -2,46 +2,46 @@
 
 ## 1. Visão geral
 
-Esta funcionalidade implementa a estrutura de persistência do banco e o fluxo de importação das bases de dados em arquivos `.xlsx`.
+Esta funcionalidade implementa a estrutura de persistência do banco e a importação das bases do mês (RH, vendas e % de comissão) em arquivos `.xlsx`.
 
-A importação é feita através da rota:
+A importação é um **job assíncrono** (A6-78): o Supervisor envia as planilhas do mês, recebe o id do job na hora (`202`) e acompanha o status. As planilhas são validadas antes de gravar; com pendência IMPEDITIVA, nada é gravado.
+
+Rotas (só o perfil Supervisor, com `Authorization: Bearer <token>`):
 
 ```http
-POST /api/importacao
+POST /api/importacao        # envia as planilhas e cria o job
+GET  /api/importacao/{id}   # status, totais e relatório de pendências
+GET  /api/importacao        # histórico de envios, do mais recente para o mais antigo
 ```
 
 O fluxo geral é:
 
 ```text
-Arquivo XLSX
+Planilhas .xlsx (RH + Vendas [+ Comissão])
     |
     v
-ImportacaoController
+ImportacaoController ------------------------> 202 { id, status: PROCESSANDO }
     |
     v
-ImportacaoService
+ImportacaoManagerService (.xlsx, nomes, um job por vez; cria o job)
     |
-    +----------------------+
-    |                      |
-    v                      v
-DetectorTipoArquivo    LeitorXlsx
-                           |
-                           v
-                    Dados normalizados
-                           |
-              +------------+------------+
-              |            |            |
-              v            v            v
-          Importador   Importador   Importador
-             RH         Vendas       Comissao
-              |            |            |
-              +------------+------------+
-                           |
-                           v
-                     Repositories
-                           |
-                           v
-                       PostgreSQL
+    v  (@Async, em segundo plano)
+ImportacaoJobService
+    |
+    +--> DetectorTipoArquivo + LeitorXlsx
+    |
+    +--> ValidadorImportacaoService --> pendências IMPEDITIVO / AVISO
+    |
+    +--> com IMPEDITIVO: job PENDENTE, nada gravado
+    |
+    +--> sem IMPEDITIVO: ImportacaoPersistenceService.executarCargaAtomica
+              |   (uma transação: tudo ou nada)
+              +--> ImportadorRhService
+              +--> ImportadorVendasService
+              +--> ImportadorComissaoService
+                        |
+                        v
+                   PostgreSQL --> job CONCLUIDO (ou FALHA)
 ```
 
 ---
@@ -53,10 +53,17 @@ A funcionalidade está organizada principalmente nos seguintes pacotes:
 ```text
 br.com.camplana
 |
-+-- Controller
++-- controller
 |   +-- ImportacaoController
 |
-+-- Entity
++-- dto/importacao
+|   +-- JobCriadoResponse
+|   +-- JobStatusResponse
+|   +-- HistoricoImportacaoResponse
+|   +-- PendenciaImportacao
+|
++-- entity
+|   +-- Importacao            (job de importação)
 |   +-- Cargo
 |   +-- Funcionario
 |   +-- FuncionarioCargo
@@ -69,7 +76,8 @@ br.com.camplana
 |   +-- MarcaCargoId
 |   +-- Venda
 |
-+-- Repository
++-- repository
+|   +-- ImportacaoRepository
 |   +-- CargoRepository
 |   +-- FuncionarioRepository
 |   +-- FuncionarioCargoRepository
@@ -79,15 +87,19 @@ br.com.camplana
 |   +-- MarcaCargoRepository
 |   +-- VendaRepository
 |
-+-- Import
++-- importacao
+|   +-- ImportacaoManagerService
+|   +-- ImportacaoJobService
+|   +-- ImportacaoPersistenceService
+|   +-- ValidadorImportacaoService
+|   +-- EncerradorImportacoesInterrompidas
 |   +-- CompetenciaExtractor
 |   +-- DetectorTipoArquivo
 |   +-- LeitorXlsx
 |   +-- NormalizadorData
 |   +-- TipoArquivo
 |
-+-- Service
-    +-- ImportacaoService
++-- service
     +-- ImportadorRhService
     +-- ImportadorVendasService
     +-- ImportadorComissaoService
@@ -581,7 +593,7 @@ Ela verifica se já existem vendas dentro do intervalo da competência.
 
 ---
 
-# 7. Classes do pacote Import
+# 7. Classes do pacote importacao
 
 ## TipoArquivo
 
@@ -692,7 +704,7 @@ Utiliza Apache POI.
 O fluxo é:
 
 ```text
-MultipartFile
+bytes da planilha (byte[])
     ↓
 Workbook
     ↓
@@ -756,33 +768,47 @@ Isso evita que o processamento entre em recursão chamando `celulaComoTexto()` n
 
 # 8. Services de importação
 
-## ImportacaoService
+## ImportacaoManagerService
 
-É o orquestrador principal.
+Recebe a requisição do controller e, antes de criar o job:
 
-Recebe uma lista de arquivos:
+1. recusa com `409` se já houver um job `PROCESSANDO`;
+2. recusa com `400` arquivo sem nome, que não seja `.xlsx` ou enviado duas vezes;
+3. lê os bytes dos arquivos e cria o job (`importacao`) com status `PROCESSANDO`;
+4. dispara o processamento em segundo plano e devolve o id.
 
-```java
-List<MultipartFile> arquivos
-```
+Também monta as respostas de `GET /api/importacao/{id}` e `GET /api/importacao`.
 
-Para cada arquivo:
+---
 
-1. verifica se é `.xlsx`;
-2. identifica o tipo;
-3. lê o arquivo usando `LeitorXlsx`;
-4. chama o importador correspondente;
-5. registra o resultado.
+## ImportacaoJobService
 
-O resultado contém:
+Roda em segundo plano (`@Async`). Para cada job:
 
-```java
-String nomeArquivo;
-String tipoDetectado;
-boolean sucesso;
-int linhasProcessadas;
-String erro;
-```
+1. identifica o tipo de cada arquivo (`DetectorTipoArquivo`) e a competência pelo nome;
+2. lê as planilhas (`LeitorXlsx`);
+3. valida o lote (`ValidadorImportacaoService`);
+4. com pendência IMPEDITIVA, encerra o job como `PENDENTE` sem gravar nada;
+5. sem IMPEDITIVA, chama a carga atômica e encerra como `CONCLUIDO`, guardando os totais e os avisos;
+6. se a carga lançar exceção (ex.: competência já importada), encerra como `FALHA` com a mensagem.
+
+---
+
+## ImportacaoPersistenceService
+
+Grava o job e executa a carga. `executarCargaAtomica` chama os três importadores numa única transação: se um falhar, nada do envio fica no banco. O status do job é gravado em transações separadas, para que a falha da carga não apague o registro da falha.
+
+---
+
+## ValidadorImportacaoService
+
+Valida o lote antes de qualquer gravação (regras na seção 16).
+
+---
+
+## EncerradorImportacoesInterrompidas
+
+Na subida do backend, marca como `FALHA` os jobs que ficaram `PROCESSANDO` porque o processo anterior parou no meio da carga. Sem isso, a regra de um job por vez bloquearia toda importação nova com `409`.
 
 ---
 
@@ -851,15 +877,9 @@ Funcionario
 VendaRepository.save()
 ```
 
-A matrícula precisa existir previamente no RH.
+A venda só é gravada se a matrícula estiver no RH da mesma competência (vínculo em `funcionario_loja` no mês da venda). Caso contrário, a venda é descartada; o validador já lista esse caso como AVISO no relatório (seção 16).
 
-Por isso, a ordem recomendada é:
-
-```text
-RH
- ↓
-VENDAS
-```
+Como RH e Vendas vão no mesmo envio, a carga grava o RH antes das vendas, na mesma transação.
 
 A competência também é validada e a API verifica se já existem vendas para aquele mês.
 
@@ -937,28 +957,13 @@ são ignoradas durante a importação.
 
 `ImportacaoController` expõe:
 
-```http
-POST /api/importacao
-```
+| Rota | Recebe | Devolve |
+|---|---|---|
+| `POST /api/importacao` | `multipart/form-data`, campo `arquivos` (um ou mais `.xlsx`) | `202` com `{ "id", "status": "PROCESSANDO" }` |
+| `GET /api/importacao/{id}` | id do job | status, competência, usuário, totais e pendências |
+| `GET /api/importacao` | nada | histórico de jobs, sem as pendências |
 
-O endpoint recebe:
-
-```java
-@RequestParam("arquivos")
-List<MultipartFile> arquivos
-```
-
-e retorna:
-
-```java
-List<ResultadoImportacaoArquivo>
-```
-
-O conteúdo é enviado como:
-
-```text
-multipart/form-data
-```
+A permissão (só Supervisor) fica na matriz do `SecurityConfig` (`/api/importacao/**`). Sem token: `401`; outro perfil: `403`.
 
 ---
 
@@ -966,38 +971,36 @@ multipart/form-data
 
 ## 10.1 Pré-requisitos
 
-Antes de utilizar o Postman:
-
-1. PostgreSQL deve estar disponível.
-2. O banco deve estar configurado.
-3. O backend deve estar executando.
-4. A aplicação deve estar disponível na porta `8080`.
-
-Para iniciar:
+1. PostgreSQL disponível (ex.: `docker compose up -d` na raiz do backend).
+2. Backend executando com o profile `dev`:
 
 ```bash
-./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-ou através da configuração de execução da IDE.
+ou pela IDE, com o profile `dev` ativo.
 
 ---
 
-## 10.2 Criar a requisição
+## 10.2 Fazer login como Supervisor
 
-No Postman:
+A importação é só do perfil Supervisor. Faça login com o Sérgio, usuário da demonstração:
 
-```text
-New Request
+- Método: `POST`
+- URL: `http://localhost:8080/api/auth/login`
+- Body → `raw` → `JSON`:
+
+```json
+{ "email": "sergio@camplana.com.br", "senha": "123456" }
 ```
 
-Método:
+Copie o `token` da resposta. Nas próximas requisições, na aba **Authorization**, escolha **Bearer Token** e cole o token.
 
-```text
-POST
-```
+---
 
-URL:
+## 10.3 Criar a requisição
+
+Método `POST`, URL:
 
 ```text
 http://localhost:8080/api/importacao
@@ -1005,330 +1008,151 @@ http://localhost:8080/api/importacao
 
 ---
 
-## 10.3 Configurar o Body
+## 10.4 Configurar o Body
 
-Acesse:
-
-```text
-Body
-```
-
-Selecione:
-
-```text
-form-data
-```
-
-Adicione uma linha:
-
-| Key | Type | Value |
-|---|---|---|
-| `arquivos` | `File` | arquivo `.xlsx` |
-
-É importante alterar o tipo de `Text` para:
-
-```text
-File
-```
-
-Depois clique na área de valor e selecione o arquivo.
+Acesse **Body** e selecione **form-data**. Para cada planilha, adicione uma linha com a chave `arquivos`, mude o tipo de `Text` para `File` e selecione o arquivo (as linhas da seção 11).
 
 Não é necessário configurar manualmente o header `Content-Type`. O Postman monta o `multipart/form-data` com o boundary necessário.
 
 ---
 
-# 11. Importando RH
+# 11. Enviando as planilhas do mês
 
-Primeiro envie o arquivo de RH.
+Envie as planilhas da competência **no mesmo envio**, uma linha `arquivos` para cada:
 
-Exemplo:
+| Key | Type | Value |
+|---|---|---|
+| `arquivos` | `File` | `BASE RH_SET25.xlsx` |
+| `arquivos` | `File` | `BASE_VENDAS_SET25.xlsx` |
+| `arquivos` | `File` | `BASE_COMMISS_FINAL.xlsx` |
 
-```text
-BASE_RH_SET25.xlsx
-```
+- RH e Vendas são obrigatórios: enviar só um deles termina o job como `PENDENTE` ("Planilha sem linhas de dados").
+- A Comissão é opcional; quando vem, o validador confere se toda marca × cargo do RH tem %.
+- O nome do arquivo identifica o tipo (`RH`, `VENDAS`, `COMISS`) e a competência (`SET25` = 2025-09).
+- Na carga, o RH é gravado antes das vendas, na mesma transação.
 
-Requisição:
-
-```http
-POST http://localhost:8080/api/importacao
-```
-
-Body:
-
-```text
-form-data
-
-arquivos | File | BASE_RH_SET25.xlsx
-```
-
-Clique:
-
-```text
-Send
-```
-
-Resposta esperada:
+Resposta imediata (`202`):
 
 ```json
-[
-  {
-    "nomeArquivo": "BASE_RH_SET25.xlsx",
-    "tipoDetectado": "RH",
-    "sucesso": true,
-    "linhasProcessadas": 467,
-    "erro": null
-  }
-]
-```
-
-O número de linhas depende do arquivo.
-
----
-
-# 12. Importando Vendas
-
-Depois que o RH for importado com sucesso, envie:
-
-```text
-BASE_VENDAS_SET25.xlsx
-```
-
-Body:
-
-```text
-form-data
-
-arquivos | File | BASE_VENDAS_SET25.xlsx
-```
-
-O sistema procura cada matrícula no cadastro de funcionários.
-
-Exemplo:
-
-```text
-Venda
-MATRIC-56
-   ↓
-FuncionarioRepository.findByMatricula()
-   ↓
-Funcionario encontrado
-   ↓
-Venda salva
-```
-
-Se a matrícula não existir:
-
-```text
-Venda referencia matricula inexistente no RH
-```
-
-Nesse caso, o RH precisa ser importado antes.
-
----
-
-# 13. Importando Comissão
-
-Depois, envie:
-
-```text
-BASE_COMMISS_SET25.xlsx
-```
-
-Body:
-
-```text
-form-data
-
-arquivos | File | BASE_COMMISS_SET25.xlsx
-```
-
-A base cria ou reutiliza:
-
-```text
-Marca
-Cargo
-MarcaCargo
+{ "id": 3, "status": "PROCESSANDO" }
 ```
 
 ---
 
-# 14. Ordem recomendada
+# 12. Acompanhando o job
 
-Para uma competência nova:
+Consulte `GET /api/importacao/{id}` (com o mesmo token) até o status sair de `PROCESSANDO`. Um mês do dataset leva cerca de 50 segundos.
 
-```text
-                    COMPETÊNCIA
-                         |
-             +-----------+-----------+
-             |                       |
-             v                       v
-            RH                  COMISSÃO
-             |
-             v
-          VENDAS
-```
-
-A ordem mais importante é:
-
-```text
-RH → VENDAS
-```
-
-porque as vendas dependem dos funcionários cadastrados pelo RH.
+| Status | Significado |
+|---|---|
+| `PROCESSANDO` | Validando ou gravando |
+| `CONCLUIDO` | Gravado; os avisos, se houver, estão em `pendencias` |
+| `PENDENTE` | Há pendência IMPEDITIVA: nada foi gravado. Corrija a planilha e envie de novo |
+| `FALHA` | Erro na carga (ex.: competência já importada) ou backend reiniciado no meio do job; o motivo está em `erro` e em `pendencias` |
 
 ---
 
-# 15. Enviando vários arquivos
+# 13. Histórico
 
-O endpoint aceita uma lista de arquivos.
+`GET /api/importacao` lista os envios, do mais recente para o mais antigo, com status, competência, usuário, linhas lidas e linhas gravadas.
 
-No Postman, podem existir várias linhas com a mesma chave:
+---
 
-```text
-arquivos | File | BASE_RH_SET25.xlsx
-arquivos | File | BASE_VENDAS_SET25.xlsx
-arquivos | File | BASE_COMMISS_SET25.xlsx
-```
+# 14. Uma importação por vez
 
-Entretanto, para testes e identificação de erros, é recomendado enviar um arquivo por vez.
+Enquanto houver um job `PROCESSANDO`, um novo envio recebe `409` ("Já existe uma importação em andamento."). A trava é um índice único no banco (`uk_importacao_em_andamento`), então vale mesmo com dois envios ao mesmo tempo.
 
-Isso facilita identificar exatamente qual base apresentou problema.
+Se o backend reiniciar no meio de um job, o `EncerradorImportacoesInterrompidas` marca esse job como `FALHA` na subida e um novo envio volta a ser aceito. Como a carga é uma transação só, nada do envio interrompido fica no banco.
+
+---
+
+# 15. Reenvio
+
+- Competência já importada: o job termina `FALHA` com "Competencia AAAA-MM ja foi importada"; os dados anteriores não mudam.
+- Job `PENDENTE`: nada foi gravado, então basta corrigir a planilha e enviar de novo.
+- Job `FALHA` por reinício: envie as mesmas planilhas de novo.
 
 ---
 
 # 16. Regras de validação
 
-## Extensão
+Feitas pelo `ValidadorImportacaoService` antes de gravar. Cada pendência traz origem (o arquivo ou `Cruzamento`), linha, campo, motivo e severidade.
 
-Somente arquivos:
+| Regra | Severidade |
+|---|---|
+| Arquivo que não é `.xlsx`, sem nome ou enviado duas vezes | recusado na hora (`400`), sem criar job |
+| Tipo do arquivo não reconhecido pelo nome, ou dois arquivos do mesmo tipo | IMPEDITIVO |
+| Planilha de RH ou de Vendas ausente ou sem linhas | IMPEDITIVO |
+| Coluna obrigatória ausente | IMPEDITIVO |
+| Data fora do formato `AAAA-MM-DD`, ou valor de venda ou % de comissão não numérico | IMPEDITIVO |
+| Competência do nome diferente entre RH e Vendas | IMPEDITIVO |
+| Funcionário do RH sem matrícula, loja ou cargo | IMPEDITIVO |
+| Marca × cargo do RH sem % na planilha de comissão (quando enviada) | IMPEDITIVO |
+| Venda de matrícula fora do RH da competência | AVISO: o mês é gravado sem essa venda; o aviso traz linha, data e valor |
+| Funcionário do RH sem venda no mês | AVISO |
 
-```text
-.xlsx
-```
+Colunas obrigatórias:
 
-são aceitos.
+| Planilha | Colunas |
+|---|---|
+| RH | `Data_Ref`, `Cod_Marca`, `Descri_Marca`, `Cod_Loja`, `Descr_Loja`, `Matricula`, `Data_Admiss`, `Cod_Cargo`, `Descri_Cargo` |
+| Vendas | `Date_Ref`, `Matricula`, `Vlr _Venda` |
+| Comissão | `Cod_Marca`, `Descr_Marca`, `Cod_Cargo`, `Descri_Cargo`, `%_Comiss` |
 
----
+Com qualquer IMPEDITIVO, nada é gravado (sem importação parcial).
 
-## Tipo
+Durante a carga, os importadores ainda conferem se o conteúdo bate com a competência do nome e se a competência já foi importada; nesses casos o job termina `FALHA`.
 
-O nome do arquivo precisa permitir identificar:
-
-```text
-RH
-VENDAS
-COMISS
-```
-
----
-
-## Competência
-
-A competência presente no nome precisa ser compatível com a competência encontrada nos dados.
-
-Exemplo:
-
-```text
-BASE_RH_SET25.xlsx
-```
-
-deve possuir dados de:
-
-```text
-SET/2025
-```
-
-Caso contrário, a importação é rejeitada.
-
----
-
-## Dados obrigatórios
-
-Quando uma coluna obrigatória estiver ausente ou vazia, é lançada uma exceção indicando a coluna.
-
-Exemplo:
-
-```text
-Coluna obrigatoria ausente/vazia: Matricula
-```
-
----
-
-## Duplicidade de RH
-
-A API verifica se já existe uma importação para a competência.
-
----
-
-## Duplicidade de Vendas
-
-A API verifica se já existem registros de venda no intervalo correspondente à competência.
-
----
-
-## Matrícula de venda
-
-A matrícula da venda precisa existir na tabela `funcionario`.
+> Por que a venda fora do RH é AVISO: a base da Dom Rock tem 60 vendas assim em ago a dez/2025 (venda antes da admissão, funcionário fora do RH do mês, matrícula que não está em nenhum RH). Como IMPEDITIVO, só julho entraria. Decisão do PO em 19/10/2026.
 
 ---
 
 # 17. Resposta da API
 
-O endpoint retorna uma lista de resultados.
-
-Exemplo:
+`POST /api/importacao` → `202`:
 
 ```json
-[
-  {
-    "nomeArquivo": "BASE_RH_SET25.xlsx",
-    "tipoDetectado": "RH",
-    "sucesso": true,
-    "linhasProcessadas": 467,
-    "erro": null
-  }
-]
+{ "id": 1, "status": "PROCESSANDO" }
 ```
 
-Em caso de erro:
+`GET /api/importacao/{id}` com o job terminado (jul/2025 do dataset real; pendências resumidas e datas ilustrativas):
 
 ```json
-[
-  {
-    "nomeArquivo": "BASE_VENDAS_SET25.xlsx",
-    "tipoDetectado": "VENDAS",
-    "sucesso": false,
-    "linhasProcessadas": 0,
-    "erro": "Venda referencia matricula inexistente no RH: MATRIC-56 - importe o RH da competencia antes das Vendas."
-  }
-]
+{
+  "id": 1,
+  "status": "CONCLUIDO",
+  "competencia": "2025-07",
+  "usuario": "Sérgio",
+  "total_linhas": 5370,
+  "linhas_importadas": 5364,
+  "totais": { "RH": 322, "VENDAS": 5018, "COMISSAO": 24 },
+  "pendencias": [
+    {
+      "origem": "BASE RH_JUL25.xlsx",
+      "linha": 0,
+      "campo": "Matricula",
+      "motivo": "Funcionário com matrícula MATRIC-52 não registrou vendas no mês",
+      "severidade": "AVISO"
+    }
+  ],
+  "criada_em": "2026-10-19T11:20:01Z",
+  "concluida_em": "2026-10-19T11:20:47Z"
+}
 ```
 
-Importante:
-
-```text
-HTTP 200
-```
-
-não significa necessariamente que o arquivo foi importado com sucesso.
-
-A aplicação retorna o resultado individual no campo:
+Aviso de venda fora do RH (ago/2025):
 
 ```json
-"sucesso"
+{
+  "origem": "Cruzamento",
+  "linha": 32,
+  "campo": "Matricula",
+  "motivo": "matrícula MATRIC-151 não encontrada no RH da competência; a venda de 2025-08-01 (R$ 79.5) não será gravada",
+  "severidade": "AVISO"
+}
 ```
 
-Portanto, sempre verificar:
-
-```json
-"sucesso": true
-```
-
-e:
-
-```json
-"erro": null
-```
+`total_linhas` conta as linhas lidas nas três planilhas; `linhas_importadas`, as gravadas. A diferença são linhas que a carga ignora de propósito (ex.: vendas fora do RH e o cargo `GERENTE QUIOSQUE` da comissão).
 
 ---
 
@@ -1384,6 +1208,8 @@ As principais relações são:
 
 A competência (`date_ref`) faz parte das entidades de relacionamento que precisam representar o estado da associação em determinado período.
 
+Além das tabelas da base, a tabela `importacao` (migration `V5`) guarda cada job: status, competência, usuário, arquivos, totais, pendências (`jsonb`), erro e datas em UTC. Um índice único parcial garante no máximo um job `PROCESSANDO`.
+
 ---
 
 # 19. Resumo das tabelas
@@ -1398,6 +1224,7 @@ A competência (`date_ref`) faz parte das entidades de relacionamento que precis
 | `funcionario_cargo` | Funcionário em um cargo por competência |
 | `marca_cargo` | Comissão de um cargo em uma marca por competência |
 | `venda` | Vendas realizadas por funcionários |
+| `importacao` | Jobs de importação, com o relatório de pendências |
 
 ---
 
@@ -1405,8 +1232,12 @@ A competência (`date_ref`) faz parte das entidades de relacionamento que precis
 
 | Componente | Responsabilidade |
 |---|---|
-| `ImportacaoController` | Receber os arquivos HTTP |
-| `ImportacaoService` | Orquestrar a importação |
+| `ImportacaoController` | Receber os arquivos e expor o status e o histórico dos jobs |
+| `ImportacaoManagerService` | Checar os arquivos, impedir dois jobs ao mesmo tempo, criar o job e montar as respostas |
+| `ImportacaoJobService` | Processar o job em segundo plano: ler, validar e decidir entre gravar ou parar |
+| `ValidadorImportacaoService` | Gerar as pendências IMPEDITIVO e AVISO antes de gravar |
+| `ImportacaoPersistenceService` | Gravar o job e executar a carga numa transação única |
+| `EncerradorImportacoesInterrompidas` | Encerrar como `FALHA` os jobs interrompidos por reinício |
 | `DetectorTipoArquivo` | Identificar o tipo da base |
 | `CompetenciaExtractor` | Extrair competência do nome |
 | `LeitorXlsx` | Ler e normalizar o XLSX |
@@ -1422,51 +1253,16 @@ A competência (`date_ref`) faz parte das entidades de relacionamento que precis
 
 # 21. Fluxo completo
 
-O fluxo completo de uma importação é:
+O fluxo completo de uma importação é o da seção 1. Para uma nova competência, o procedimento recomendado é:
 
 ```text
-Postman
-   |
-   | multipart/form-data
-   v
-ImportacaoController
-   |
-   v
-ImportacaoService
-   |
-   +--> valida .xlsx
-   |
-   +--> DetectorTipoArquivo
-   |
-   +--> LeitorXlsx
-   |       |
-   |       +--> lê cabeçalho
-   |       +--> lê células
-   |       +--> normaliza valores
-   |       +--> ignora linhas vazias
-   |
-   +--> Importador correspondente
-           |
-           +--> valida competência
-           +--> valida duplicidade
-           +--> valida dependências
-           +--> utiliza Repository
-                    |
-                    v
-                PostgreSQL
+1. Subir PostgreSQL e o backend (profile dev)
+2. Login como Supervisor (POST /api/auth/login)
+3. POST /api/importacao com RH + Vendas (+ Comissão) do mês
+4. GET /api/importacao/{id} até sair de PROCESSANDO
+5. CONCLUIDO: conferir os avisos
+   PENDENTE: corrigir a planilha e enviar de novo
+   FALHA: ler o motivo em "erro"
 ```
 
-Para uma nova competência, o procedimento operacional recomendado é:
-
-```text
-1. Subir PostgreSQL
-2. Subir Spring Boot
-3. Abrir Postman
-4. POST /api/importacao
-5. Enviar RH
-6. Verificar sucesso
-7. Enviar Vendas
-8. Verificar sucesso
-9. Enviar Comissão
-10. Verificar sucesso
-```
+Para carregar jul a dez/2025 de uma vez no ambiente completo, use o `scripts/importar-dataset.sh` do repositório `domrock-camplana`.

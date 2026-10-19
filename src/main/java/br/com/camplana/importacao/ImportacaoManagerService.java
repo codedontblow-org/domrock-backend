@@ -7,8 +7,6 @@ import br.com.camplana.dto.importacao.PendenciaImportacao;
 import br.com.camplana.entity.Importacao;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.repository.ImportacaoRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -16,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.util.*;
@@ -33,12 +33,13 @@ public class ImportacaoManagerService {
     public ImportacaoManagerService(
             ImportacaoRepository importacaoRepository,
             ImportacaoPersistenceService persistenceService,
-            ImportacaoJobService jobService
+            ImportacaoJobService jobService,
+            ObjectMapper objectMapper
     ) {
         this.importacaoRepository = importacaoRepository;
         this.persistenceService = persistenceService;
         this.jobService = jobService;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     public JobCriadoResponse iniciarImportacao(List<MultipartFile> arquivos, Usuario usuario) {

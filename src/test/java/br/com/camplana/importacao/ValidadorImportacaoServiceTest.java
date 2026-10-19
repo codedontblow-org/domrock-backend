@@ -18,9 +18,11 @@ class ValidadorImportacaoServiceTest {
         validador = new ValidadorImportacaoService();
     }
 
+    // AVISO e nao IMPEDITIVO: a base real tem 60 vendas assim em ago-dez/2025 e, como impeditivo,
+    // so julho entrava. O ImportadorVendasService ja descarta essas vendas; o aviso as torna visiveis.
     @Test
-    @DisplayName("Deve gerar IMPEDITIVO se houver matrícula em Vendas ausente no RH")
-    void deveGerarImpeditivoQuandoMatriculaVendaNaoExisteNoRh() {
+    @DisplayName("Venda de matrícula ausente do RH gera AVISO com data e valor, sem barrar a carga")
+    void deveGerarAvisoQuandoMatriculaVendaNaoExisteNoRh() {
         // RH contém MATRIC-001
         Map<String, String> linhaRh = criarLinhaRh("MATRIC-001", "M01", "C01");
         List<Map<String, String>> linhasRh = List.of(linhaRh);
@@ -39,15 +41,19 @@ class ValidadorImportacaoServiceTest {
                 "BASE_COMMISS_FINAL.xlsx", linhasComissao
         );
 
-        assertTrue(resultado.temImpeditivo());
-        assertFalse(resultado.valido());
+        assertFalse(resultado.temImpeditivo());
+        assertTrue(resultado.valido());
 
-        boolean temCruzamentoImpeditivo = resultado.pendencias().stream()
-                .anyMatch(p -> "Cruzamento".equals(p.origem()) 
-                        && PendenciaImportacao.IMPEDITIVO.equals(p.severidade())
-                        && p.motivo().contains("MATRIC-999"));
+        PendenciaImportacao aviso = resultado.pendencias().stream()
+                .filter(p -> "Cruzamento".equals(p.origem()) && p.motivo().contains("MATRIC-999"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Sem pendência de Cruzamento para a MATRIC-999: " + resultado.pendencias()));
 
-        assertTrue(temCruzamentoImpeditivo, "Deve conter pendência impeditiva de Cruzamento para a MATRIC-999");
+        assertEquals(PendenciaImportacao.AVISO, aviso.severidade());
+        assertEquals(2, aviso.linha());
+        assertTrue(aviso.motivo().contains("não encontrada no RH da competência"), aviso.motivo());
+        assertTrue(aviso.motivo().contains("2025-10-15") && aviso.motivo().contains("1500.00"), aviso.motivo());
+        assertTrue(aviso.motivo().contains("não será gravada"), aviso.motivo());
     }
 
     @Test
