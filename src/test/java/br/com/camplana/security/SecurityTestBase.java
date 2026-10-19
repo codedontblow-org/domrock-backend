@@ -7,7 +7,6 @@ import br.com.camplana.entity.Usuario;
 import br.com.camplana.handler.SecurityErrorHandler;
 import br.com.camplana.mapper.UsuarioMapper;
 import br.com.camplana.repository.UsuarioRepository;
-import br.com.camplana.service.ImportacaoService;
 import br.com.camplana.service.UsuarioService;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +16,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
+import br.com.camplana.importacao.ImportacaoManagerService;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +38,7 @@ public abstract class SecurityTestBase {
 
     @MockitoBean protected UsuarioRepository usuarioRepository;
     @MockitoBean protected LanaClient lanaClient;
-    @MockitoBean protected ImportacaoService importacaoService;
+    @MockitoBean protected ImportacaoManagerService managerService;
     @MockitoBean protected UsuarioService usuarioService;
     @MockitoBean protected UsuarioMapper usuarioMapper;
 
@@ -51,7 +50,6 @@ public abstract class SecurityTestBase {
         sergio   = usuario(2, "Sérgio",   "sergio@camplana.com.br",   Perfil.SUPERVISOR);
         ana      = usuario(4, "Ana",      "ana@camplana.com.br",      Perfil.ADMIN);
         when(usuarioService.listAll(any())).thenReturn(Page.empty());
-        when(importacaoService.importarLote(any())).thenReturn(List.of());
     }
 
     protected Usuario usuario(int id, String nome, String email, Perfil perfil) {
