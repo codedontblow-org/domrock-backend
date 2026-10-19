@@ -189,7 +189,7 @@ Todas as rotas, exceto o login, exigem o header `Authorization: Bearer <token>`.
 | `POST /api/chat` e `POST /api/simulacoes` | sim | sim | não |
 | `/api/campanhas/**` (Sprint 2) | sim | sim | não |
 | `POST /api/campanhas/{id}/decidir` (Sprint 2) | não | sim | não |
-| `POST /api/importacao` | não | sim | não |
+| `/api/importacao/**` (importação da base do mês; ver [docs/guia_importacao.md](docs/guia_importacao.md)) | não | sim | não |
 | `/api/usuarios/**` | não | não | sim |
 
 Qualquer rota fora dessa tabela é negada.
