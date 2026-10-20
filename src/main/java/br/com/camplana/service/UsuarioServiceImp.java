@@ -4,6 +4,7 @@ import br.com.camplana.entity.Perfil;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.exception.BadRequestException;
 import br.com.camplana.exception.ConflictException;
+import br.com.camplana.exception.NotFoundException;
 import br.com.camplana.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -31,7 +32,7 @@ public class UsuarioServiceImp implements UsuarioService {
     @Override
     public Usuario findById(Integer id) {
         return usuarioRepository.findById(id)
-                .orElseThrow(() -> new BadRequestException("Usuário não encontrado."));
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
     }
 
     @Override

@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 @WebMvcTest(
         controllers = UsuarioController.class,
@@ -54,6 +55,17 @@ class UsuarioControllerTest {
     void setUp() {
         ana = usuario(4, "Ana", "ana@camplana.com.br", Perfil.ADMIN);
         carlos = usuario(2, "Carlos", "carlos@camplana.dev", Perfil.SUPERVISOR);
+    }
+
+    @Test
+    void deveRetornar400QuandoEmailEmBrancoNoPut() throws Exception {
+        String payload = "{\"email\": \"\"}";
+
+        mockMvc.perform(put("/api/usuarios/5")
+                        .header("Authorization", bearer(ana))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

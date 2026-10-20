@@ -17,6 +17,11 @@ import java.time.LocalDateTime;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErroResponse> handleNotFoundException(NotFoundException ex, HttpServletRequest req) {
+        return erro(HttpStatus.NOT_FOUND, ex.getMessage(), req);
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErroResponse> handleBadRequest(BadRequestException ex, HttpServletRequest req) {
         return erro(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
