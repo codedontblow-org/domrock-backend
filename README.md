@@ -190,7 +190,7 @@ Todas as rotas, exceto o login, exigem o header `Authorization: Bearer <token>`.
 | `/api/campanhas/**` (Sprint 2) | sim | sim | não |
 | `POST /api/campanhas/{id}/decidir` (Sprint 2) | não | sim | não |
 | `/api/importacao/**` (importação da base do mês; ver [docs/guia_importacao.md](docs/guia_importacao.md)) | não | sim | não |
-| `/api/usuarios/**` | não | não | sim |
+| `/api/usuarios/**` (ver [Gestão de usuários](#gestão-de-usuários)) | não | não | sim |
 
 Qualquer rota fora dessa tabela é negada.
 
@@ -208,6 +208,25 @@ Criados pela migration `V4`. Senha de todos: `123456` (só para a demonstração
 | 4 | Ana | ana@camplana.com.br | Administrador (`ADMIN`) |
 
 Usuário inativo (`ativo = false`) não entra, nem pelo login nem com um token emitido antes.
+
+### Gestão de usuários
+
+Só o Administrador. O usuário nunca é apagado: é desativado, para que campanhas e aprovações continuem apontando para o autor.
+
+| Rota | O que faz | Erros |
+| --- | --- | --- |
+| `POST /api/usuarios` | Cria o usuário. Corpo: `nome`, `email`, `senha` (6 a 72 caracteres) e `perfil` (`GERENTE`, `SUPERVISOR` ou `ADMIN`). Responde `201` | `409` se o e-mail já existir, sem diferenciar maiúsculas |
+| `GET /api/usuarios` | Lista paginada (parâmetros `page`, `size` e `sort` do Spring, ex.: `?page=0&size=20&sort=nome`) | |
+| `GET /api/usuarios/{id}` | Busca um usuário | |
+| `PUT /api/usuarios/{id}` | Edita `nome`, `email` e `perfil`; campo ausente não muda. A senha não é editada aqui | `409` se o e-mail for de outro usuário; `400` se o Administrador tirar o próprio perfil de Administrador |
+| `DELETE /api/usuarios/{id}` | **Desativa** (`ativo = false`); a linha continua no banco. Responde `200` com o usuário | `400` se for a própria conta |
+| `PATCH /api/usuarios/{id}/reativar` | Reativa (`ativo = true`) | |
+
+A resposta nunca traz a senha: só `id`, `nome`, `email`, `perfil` e `ativo`.
+
+- O e-mail é comparado sem diferenciar maiúsculas no cadastro, na edição e no login (`Ana@camplana.com.br` entra como `ana@camplana.com.br`).
+- Editar o e-mail de um usuário invalida o token dele (o token guarda o e-mail): ele precisa entrar de novo.
+- Com as duas travas do Administrador, sempre sobra pelo menos um Administrador ativo.
 
 ---
 
