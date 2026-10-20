@@ -1,5 +1,7 @@
 package br.com.camplana.client;
 
+import br.com.camplana.exception.LanaIndisponivelException;
+import br.com.camplana.exception.LanaRespostaException;
 import br.com.camplana.grpc.IAServiceGrpc;
 import br.com.camplana.grpc.InvokeRequest;
 import br.com.camplana.grpc.InvokeResponse;
@@ -32,6 +34,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Teste de integração do LanaClient com os beans reais (LanaClient + IaGrpcClientService)
  * contra um servidor gRPC real e local, sem mocks e sem depender da Lana em Python.
+ * Regressão (merge do backend #6): a ficha e os eventos não passavam pelo gRPC e o painel do
+ * front nunca abria; estes testes cobram os dois sentidos.
  */
 @SpringBootTest(
         classes = {
@@ -41,6 +45,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         },
         properties = "grpc.lana.host=localhost")
 class LanaClientTests {
+
+    private static final ObjectMapper JSON = JsonMapper.builder().build();
+
+    private static final String REGRA_JSON = "{\"rule_id\":\"bf-1\",\"faltantes\":[]}";
+    private static final String EVENTOS_JSON = "[{\"type\":\"tool_call\",\"tool\":\"registrar_parametros_regra\"}]";
 
     /** Último pedido recebido pelo servidor, para verificar o que o Java enviou. */
     private static final AtomicReference<InvokeRequest> ULTIMO_PEDIDO = new AtomicReference<>();
@@ -55,19 +64,25 @@ class LanaClientTests {
         }
     }
 
-    /** Implementação real (não é mock) do serviço da Lana, só para o teste. */
+    /** Implementação real (não é mock) do serviço da Lana, só para o teste; o prompt escolhe o cenário. */
     static class LanaFakeService extends IAServiceGrpc.IAServiceImplBase {
         @Override
         public void invokeAgent(InvokeRequest request, StreamObserver<InvokeResponse> observer) {
             ULTIMO_PEDIDO.set(request);
 
-            if ("falhar".equals(request.getPrompt())) {
-                observer.onError(Status.INTERNAL.withDescription("erro simulado").asRuntimeException());
-                return;
+            switch (request.getPrompt()) {
+                case "falhar" -> observer.onError(Status.INTERNAL.withDescription("erro simulado").asRuntimeException());
+                case "cota" -> observer.onError(Status.RESOURCE_EXHAUSTED.withDescription("Aguarde 1 minuto").asRuntimeException());
+                case "demorar" -> observer.onError(Status.DEADLINE_EXCEEDED.withDescription("A Lana demorou demais").asRuntimeException());
+                case "registrar campanha" -> responder(observer, InvokeResponse.newBuilder()
+                        .setResposta("Registrei a campanha.").setEventsJson(EVENTOS_JSON).setRegraJson(REGRA_JSON).build());
+                default -> responder(observer, InvokeResponse.newBuilder()
+                        .setResposta("Resposta da Lana para: " + request.getPrompt()).build());
             }
-            observer.onNext(InvokeResponse.newBuilder()
-                    .setResposta("Resposta da Lana para: " + request.getPrompt())
-                    .build());
+        }
+
+        private static void responder(StreamObserver<InvokeResponse> observer, InvokeResponse resposta) {
+            observer.onNext(resposta);
             observer.onCompleted();
         }
     }
@@ -98,16 +113,31 @@ class LanaClientTests {
     private LanaClient lanaClient;
 
     @Test
-    void invocarAgenteRepassaOCorpoEDevolveOJsonDaLana() {
+    void invocarAgenteDevolveAFichaEOsEventosDoTurno() {
+        JsonNode resultado = lanaClient.invocarAgente(Map.of("message", "registrar campanha", "chat_id", "chat-1"));
+
+        assertThat(resultado.get("response").asString()).isEqualTo("Registrei a campanha.");
+        assertThat(resultado.get("regra").get("rule_id").asString()).isEqualTo("bf-1");
+        assertThat(resultado.get("events")).hasSize(1);
+        assertThat(resultado.get("events").get(0).get("tool").asString()).isEqualTo("registrar_parametros_regra");
+    }
+
+    @Test
+    void invocarAgenteEnviaAFichaDoPainel() {
+        lanaClient.invocarAgente(Map.of("message", "so a marca 30", "chat_id", "chat-1",
+                "regra", Map.of("rule_id", "r1")));
+
+        InvokeRequest enviado = ULTIMO_PEDIDO.get();
+        assertThat(enviado.getPrompt()).isEqualTo("so a marca 30");
+        assertThat(JSON.readTree(enviado.getRegraJson()).get("rule_id").asString()).isEqualTo("r1");
+    }
+
+    @Test
+    void turnoSemFichaNovaDevolveRegraNulaEEventosVazios() {
         JsonNode resultado = lanaClient.invocarAgente(
                 Map.of("message", "Quanto vendi em dezembro?", "chat_id", "chat-123"));
 
-        // O que o Java enviou por gRPC
-        InvokeRequest enviado = ULTIMO_PEDIDO.get();
-        assertThat(enviado.getPrompt()).isEqualTo("Quanto vendi em dezembro?");
-        assertThat(enviado.getChatId()).isEqualTo("chat-123");
-
-        // O contrato devolvido ao front (AgentResponse)
+        assertThat(ULTIMO_PEDIDO.get().getRegraJson()).isEmpty();
         assertThat(resultado.get("chat_id").asString()).isEqualTo("chat-123");
         assertThat(resultado.get("response").asString())
                 .isEqualTo("Resposta da Lana para: Quanto vendi em dezembro?");
@@ -125,17 +155,26 @@ class LanaClientTests {
     }
 
     @Test
-    void simularReaproveitaOFluxoGrpcDoAgente() {
-        JsonNode resultado = lanaClient.simular(Map.of("message", "simular", "chat_id", "chat-sim"));
-
-        assertThat(resultado.get("response").asString()).isEqualTo("Resposta da Lana para: simular");
+    void cotaDaIaVira503ComEtapaEMensagemParaOFront() {
+        assertThatThrownBy(() -> lanaClient.invocarAgente(Map.of("message", "cota", "chat_id", "x")))
+                .isInstanceOfSatisfying(LanaRespostaException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(503);
+                    assertThat(JSON.readTree(e.getCorpo()).get("etapa").asString()).isEqualTo("cota_llm");
+                    assertThat(JSON.readTree(e.getCorpo()).get("mensagem").asString()).isEqualTo("Aguarde 1 minuto");
+                });
     }
 
     @Test
-    void invocarAgenteEncapsulaFalhasDoServidorGrpc() {
+    void demoraDaLanaVira504() {
+        assertThatThrownBy(() -> lanaClient.invocarAgente(Map.of("message", "demorar", "chat_id", "x")))
+                .isInstanceOfSatisfying(LanaRespostaException.class, e -> assertThat(e.getStatus()).isEqualTo(504));
+    }
+
+    @Test
+    void outraFalhaDoServidorGrpcViraLanaIndisponivel() {
         assertThatThrownBy(() -> lanaClient.invocarAgente(Map.of("message", "falhar", "chat_id", "x")))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Erro ao invocar a Lana via gRPC")
-                .hasMessageContaining("INTERNAL");
+                .isInstanceOf(LanaIndisponivelException.class)
+                .hasMessageContaining("INTERNAL")
+                .hasMessageContaining("erro simulado");
     }
 }

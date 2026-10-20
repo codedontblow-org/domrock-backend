@@ -1,6 +1,7 @@
 package br.com.camplana.controller;
 
 import br.com.camplana.client.LanaClient;
+import br.com.camplana.client.LanaSimulacaoClient;
 import br.com.camplana.dto.ChatRequest;
 import br.com.camplana.entity.Perfil;
 import br.com.camplana.entity.Usuario;
@@ -52,6 +53,9 @@ class LanaControllersTests {
 
     @MockitoBean
     private LanaClient lanaClient;
+
+    @MockitoBean
+    private LanaSimulacaoClient lanaSimulacaoClient;
 
     @MockitoBean
     private UsuarioRepository usuarioRepository;
@@ -110,12 +114,12 @@ class LanaControllersTests {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(lanaClient);
+        verifyNoInteractions(lanaSimulacaoClient);
     }
 
     @Test
     void simulacaoRepassaOErro422DaLanaParaOFront() throws Exception {
-        given(lanaClient.simular(any())).willThrow(
+        given(lanaSimulacaoClient.simular(any())).willThrow(
                 new LanaRespostaException(422, "{\"etapa\":\"validacao\",\"mensagem\":\"Regra incompleta\"}"));
 
         mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
@@ -126,7 +130,7 @@ class LanaControllersTests {
 
     @Test
     void simulacaoResponde502QuandoALanaEstaFora() throws Exception {
-        given(lanaClient.simular(any())).willThrow(new LanaIndisponivelException("Lana indisponível"));
+        given(lanaSimulacaoClient.simular(any())).willThrow(new LanaIndisponivelException("Lana indisponível"));
 
         mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"regra\":{}}"))

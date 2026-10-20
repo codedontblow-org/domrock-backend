@@ -32,17 +32,22 @@ public class IaGrpcClientService {
         this.blockingStub = IAServiceGrpc.newBlockingStub(channel);
     }
 
-    public String chamarAgenteLana(String prompt, String chatId) {
+    /**
+     * Um turno do chat na Lana. regraJson = ficha do painel em JSON ("" sem ficha); a resposta
+     * traz o texto e, em JSON, os eventos e a ficha registrada no turno.
+     * Ex.: chamarAgenteLana("Black Friday +1%", "chat-1", "").getRegraJson()
+     */
+    public InvokeResponse chamarAgenteLana(String prompt, String chatId, String regraJson) {
         InvokeRequest request = InvokeRequest.newBuilder()
                 .setPrompt(prompt)
                 .setChatId(chatId)
+                .setRegraJson(regraJson)
                 .build();
 
-        InvokeResponse response = this.blockingStub
+        return this.blockingStub
                 .withDeadlineAfter(2, TimeUnit.MINUTES)
                 .withWaitForReady()
                 .invokeAgent(request);
-        return response.getResposta();
     }
 
     @PreDestroy
