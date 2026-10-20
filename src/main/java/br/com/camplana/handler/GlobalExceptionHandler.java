@@ -11,11 +11,23 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import br.com.camplana.exception.BadRequestException;
+import br.com.camplana.exception.BadRequestExceptionDetails;
+import br.com.camplana.exception.LanaIndisponivelException;
+import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.exception.ValidationException;
+import br.com.camplana.exception.ValidationExceptionDetails;
+
 import java.time.LocalDateTime;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErroResponse> handleNotFoundException(NotFoundException ex, HttpServletRequest req) {
+        return erro(HttpStatus.NOT_FOUND, ex.getMessage(), req);
+    }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErroResponse> handleBadRequest(BadRequestException ex, HttpServletRequest req) {

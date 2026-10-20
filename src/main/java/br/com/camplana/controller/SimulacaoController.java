@@ -1,6 +1,6 @@
 package br.com.camplana.controller;
 
-import br.com.camplana.client.LanaClient;
+import br.com.camplana.client.LanaSimulacaoClient;
 import br.com.camplana.exception.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,13 +16,13 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class SimulacaoController {
 
-    private final LanaClient lanaClient;
+    private final LanaSimulacaoClient lanaSimulacaoClient;
 
     @PostMapping
     public ResponseEntity<JsonNode> simular(@RequestBody JsonNode body) {
         if (!body.path("regra").isObject()) {
             throw new BadRequestException("Esperado {\"regra\": {...}} no corpo; recebido " + body);
         }
-        return ResponseEntity.ok(lanaClient.simular(body));
+        return ResponseEntity.ok(lanaSimulacaoClient.simular(body));
     }
 }
