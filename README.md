@@ -47,7 +47,7 @@ Leia mais em: [docs/arquitetura-comunicacao.md](docs/arquitetura-comunicacao.md)
 
 ---
 
-## 📂 Estrutura do Projeto
+## 📂 Estrutura do Repositório
 
 ```text
 domrock-backend/
