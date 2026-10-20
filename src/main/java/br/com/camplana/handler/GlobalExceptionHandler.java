@@ -11,6 +11,13 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import br.com.camplana.exception.BadRequestException;
+import br.com.camplana.exception.BadRequestExceptionDetails;
+import br.com.camplana.exception.LanaIndisponivelException;
+import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.exception.ValidationException;
+import br.com.camplana.exception.ValidationExceptionDetails;
+
 import java.time.LocalDateTime;
 
 @RestControllerAdvice

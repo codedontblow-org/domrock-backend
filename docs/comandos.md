@@ -5,11 +5,11 @@ Este documento contém os principais comandos utilizados no desenvolvimento e ma
 ## Execução da Aplicação
 
 ```bash
-# Iniciar a aplicação em desenvolvimento (com Hot Reload via DevTools)
-./mvnw spring-boot:run
+# Iniciar a aplicação em desenvolvimento (com Hot Reload via DevTools; o profile dev traz os padrões de banco, Lana e segredo JWT)
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 
 # Iniciar em modo Debug (porta padrão 5005 para anexar a IDE)
-./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
 ```
 
 ## Build e Empacotamento
@@ -38,9 +38,13 @@ Este documento contém os principais comandos utilizados no desenvolvimento e ma
 ## Banco de Dados e Docker Local
 
 ```bash
-# Subir contêiner do PostgreSQL isolado (caso não use Dev Containers)
-docker run --name postgres-camplana -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres -p 5432:5432 -d postgres
+# Subir o PostgreSQL do docker-compose.yml (banco camplana na porta 5432; caso não use Dev Containers)
+docker compose up -d
 
-# Parar e remover o contêiner local do banco
-docker stop postgres-camplana && docker rm postgres-camplana
+# Mesma coisa com outra porta, se a 5432 estiver em uso (informe o endereço ao backend)
+POSTGRES_HOST_PORT=5433 docker compose up -d
+export DB_URL=jdbc:postgresql://localhost:5433/camplana
+
+# Parar o banco (os dados ficam no volume; acrescente -v para apagá-los)
+docker compose down
 ```

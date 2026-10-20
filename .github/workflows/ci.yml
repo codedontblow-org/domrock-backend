@@ -24,7 +24,12 @@ jobs:
           cache: maven
 
       # Os testes usam Testcontainers (Postgres), o Docker ja vem no runner
+      # GRPC_LANA_HOST/PORT nao tem valor padrao no application.properties (79203ef) e sem eles
+      # o contexto do Spring nao sobe; os testes nao falam com a Lana, so precisam de um endereco
       - name: Build e testes
+        env:
+          GRPC_LANA_HOST: localhost
+          GRPC_LANA_PORT: 50051
         run: ./mvnw -B verify
 
       - name: Publica relatorios de teste
