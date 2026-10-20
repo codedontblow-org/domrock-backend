@@ -8,12 +8,13 @@ O projeto utiliza uma arquitetura em camadas (Layered Architecture), PostgreSQL 
 
 ## Tecnologias Utilizadas
 
-![Java](https://img.shields.io/badge/Java-17-141416?style=for-the-badge\&logo=openjdk\&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-141416?style=for-the-badge\&logo=springboot\&logoColor=white)
-![Spring Security](https://img.shields.io/badge/Spring_Security-141416?style=for-the-badge\&logo=springsecurity\&logoColor=white)
-![Maven](https://img.shields.io/badge/Maven-141416?style=for-the-badge\&logo=apachemaven\&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-141416?style=for-the-badge\&logo=postgresql\&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-141416?style=for-the-badge\&logo=docker\&logoColor=white)
+![Java](https://img.shields.io/badge/Java-17-00B4F1?style=for-the-badge\&logo=openjdk\&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-00B4F1?style=for-the-badge\&logo=springboot\&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-00B4F1?style=for-the-badge\&logo=postgresql\&logoColor=white)
+![Spring Security](https://img.shields.io/badge/Spring_Security-00B4F1?style=for-the-badge\&logo=springsecurity\&logoColor=white)
+![Maven](https://img.shields.io/badge/Maven-00B4F1?style=for-the-badge\&logo=apachemaven\&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-00B4F1?style=for-the-badge\&logo=docker\&logoColor=white)
+![gRPC](https://img.shields.io/badge/gRPC-00B4F1?style=for-the-badge\&logo=grpc\&logoColor=white)
 
 ---
 
@@ -28,7 +29,21 @@ A aplicação é organizada em camadas responsáveis por diferentes partes do si
 * **Repository** — acesso e persistência dos dados utilizando Spring Data JPA.
 * **Entity** — representação das entidades persistidas no PostgreSQL.
 * **Security** — login, token JWT e permissões por perfil (Spring Security).
-* **Client** — chamadas HTTP para a Lana (chat e simulação).
+* **Client** — chamadas gRPC para a Lana (chat e simulação).
+
+## Comunicação com o Agente (Microsserviço Python)
+
+
+| | Java (Spring) | Python (Lana) |
+|---|---|---|
+| Papel no gRPC | **Cliente** (inicia a chamada) | **Servidor** (escuta e responde) |
+| Classe principal | `IaGrpcClientService` (stub bloqueante) | `IAServiceServicer` |
+| Porta | usa `grpc.lana.port=50051` | escuta em `[::]:50051` |
+| Keepalive e deadline | `keepAliveTime(30s)` e `withDeadlineAfter(2 min)` | `keepalive_time_ms` e timeout de 100 s |
+
+> O `.proto` é o contrato comum: o Java gera o stub cliente (`IAServiceGrpc`) e o Python gera o servicer (`ia_service_pb2_grpc`).
+
+Leia mais em: [docs/arquitetura-comunicacao.md](docs/arquitetura-comunicacao.md)
 
 ---
 
@@ -41,14 +56,17 @@ domrock-backend/
 ├── .mvn/                  # Arquivos do Maven Wrapper
 ├── docs/                  # Documentação técnica do projeto
 │   ├── comandos.md        # Guia de comandos Maven e Docker
+│   ├── arquitetura-comunicacao.md # Documentação da Arquitetura com gRPC
 │   ├── manual-instalacao.md
-│   ├── guia_importacao.md # Importação das planilhas e entidades
+│   ├── guia-importacao.md # Importação das planilhas e entidades
 │   └── domrock-dataset/   # Planilhas da Dom Rock (RH, vendas e % de comissão, jul-dez/2025)
 │
 ├── src/
 │   ├── main/
+│   │   ├── proto/            # Contrato .proto (gRPC)
 │   │   ├── java/br/com/camplana/
-│   │   │   ├── client/       # Cliente HTTP da Lana
+│   │   │   ├── client/       # Cliente gRPC da Lana (LanaClient)
+│   │   │   ├── service/      # Regras de negócio e IaGrpcClientService (canal gRPC)
 │   │   │   ├── controller/   # Controllers REST
 │   │   │   ├── dto/          # Corpos de requisição e resposta (auth, usuario)
 │   │   │   ├── entity/       # Entidades JPA
@@ -57,8 +75,7 @@ domrock-backend/
 │   │   │   ├── importacao/   # Leitura e validação das planilhas .xlsx
 │   │   │   ├── mapper/       # Conversão entre entidades e DTOs
 │   │   │   ├── repository/   # Interfaces Spring Data JPA
-│   │   │   ├── security/     # JWT, filtro, matriz de perfis
-│   │   │   └── service/      # Regras de negócio
+│   │   │   └── security/     # JWT, filtro, matriz de perfis
 │   │   │
 │   │   └── resources/
 │   │       ├── application.properties      # Valores de todos os ambientes, sem padrões
@@ -95,7 +112,7 @@ O backend **não lê arquivo `.env`**: as configurações vêm de variáveis de 
 | Arquivo | Quando vale | Padrões |
 | --- | --- | --- |
 | `application.properties` | Sempre (inclusive no Docker Compose do `domrock-camplana`) | **Nenhum**: faltou variável, a aplicação não sobe |
-| `application-dev.properties` | Só com o profile `dev` ativo | Banco em `localhost:5432/camplana`, usuário e senha `postgres`, Lana em `localhost:8000` e um segredo JWT de desenvolvimento |
+| `application-dev.properties` | Só com o profile `dev` ativo | Banco em `localhost:5432/camplana`, usuário e senha `postgres`, Lana em `localhost:50051` e um segredo JWT de desenvolvimento |
 
 Variáveis obrigatórias fora do profile `dev`:
 
@@ -104,8 +121,9 @@ Variáveis obrigatórias fora do profile `dev`:
 | `DB_URL` | `jdbc:postgresql://localhost:5432/camplana` | Endereço do banco |
 | `DB_USERNAME` / `DB_PASSWORD` | `postgres` / `postgres` | Credenciais do banco |
 | `JWT_SECRET` | saída de `openssl rand -base64 48` | Segredo que assina o token do login (mínimo 32 caracteres) |
-| `LANA_URL` | `http://localhost:8000` | Endereço da Lana |
 | `LANA_DB_PASSWORD` | `lana_leitura` | Senha do papel somente leitura da Lana (criado pela migration `V3`) |
+| `GRPC_LANA_HOST` | `localhost` (no Devcontainer:  `host.docker.internal`) | Endereço do servidor gRPC da Lana |
+| `GRPC_LANA_PORT` | `50051` | Porta do servidor gRPC da Lana |
 
 No profile `dev`, qualquer uma dessas variáveis, se definida, substitui o padrão (ex.: `DB_URL` para usar outra porta).
 
@@ -189,7 +207,7 @@ Todas as rotas, exceto o login, exigem o header `Authorization: Bearer <token>`.
 | `POST /api/chat` e `POST /api/simulacoes` | sim | sim | não |
 | `/api/campanhas/**` (Sprint 2) | sim | sim | não |
 | `POST /api/campanhas/{id}/decidir` (Sprint 2) | não | sim | não |
-| `/api/importacao/**` (importação da base do mês; ver [docs/guia_importacao.md](docs/guia_importacao.md)) | não | sim | não |
+| `/api/importacao/**` (importação da base do mês; ver [docs/guia-importacao.md](docs/guia-importacao.md)) | não | sim | não |
 | `/api/usuarios/**` (ver [Gestão de usuários](#gestão-de-usuários)) | não | não | sim |
 
 Qualquer rota fora dessa tabela é negada.
@@ -280,7 +298,8 @@ mvnw.cmd test
 
 * [docs/comandos.md](docs/comandos.md): principais comandos utilizados no desenvolvimento.
 * [docs/manual-instalacao.md](docs/manual-instalacao.md): passo a passo de instalação.
-* [docs/guia_importacao.md](docs/guia_importacao.md): importação das planilhas e estrutura das entidades.
+* [docs/guia-importacao.md](docs/guia-importacao.md): importação das planilhas e estrutura das entidades.
+* [docs/arquitetura-comunicacao.md](docs/arquitetura-comunicacao.md): diagramas e detalhamento de arquitetura com gRPC para comunicação com o microsserviço de IA.
 
 ---
 
