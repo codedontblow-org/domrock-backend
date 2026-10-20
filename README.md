@@ -1,4 +1,4 @@
-# Backend - CamplanaAI
+# Backend - Camplana
 
 Backend do  **Camplana**, desenvolvido em Java 17 e Spring Boot 4, responsável pelas regras de negócio, autenticação e autorização de usuários, gerenciamento de dados e integração com a Lana, agente de IA generativa.
 
