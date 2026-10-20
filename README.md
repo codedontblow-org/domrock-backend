@@ -1,12 +1,13 @@
 # Backend - CamplanaAI
 
-API desenvolvida em **Java 17 com Spring Boot 4** para o projeto **CamplanaAI**, responsável pelo gerenciamento das regras de negócio, pelo login com permissões por perfil e pela integração com a **Lana** (agente de IA Generativa).
+Backend do  **Camplana**, desenvolvido em Java 17 e Spring Boot 4, responsável pelas regras de negócio, autenticação e autorização de usuários, gerenciamento de dados e integração com a Lana, agente de IA generativa.
 
-O projeto utiliza uma arquitetura em camadas (Layered Architecture), PostgreSQL como banco de dados relacional e **Dev Containers** para padronização do ambiente de desenvolvimento.
+A aplicação expõe uma API REST para o frontend e utiliza gRPC para se comunicar com o microsserviço Python da Lana. <br>
+A persistência é realizada em PostgreSQL, as alterações de esquema são gerenciadas pelo Flyway e o ambiente de desenvolvimento pode ser padronizado com Docker e Dev Containers.
 
 ---
 
-## Tecnologias Utilizadas
+## 🛠️ Tecnologias Utilizadas
 
 ![Java](https://img.shields.io/badge/Java-17-00B4F1?style=for-the-badge\&logo=openjdk\&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-00B4F1?style=for-the-badge\&logo=springboot\&logoColor=white)
@@ -18,9 +19,9 @@ O projeto utiliza uma arquitetura em camadas (Layered Architecture), PostgreSQL 
 
 ---
 
-## Arquitetura
+## 🏗️ Arquitetura
 
-**Tipo de Arquitetura:** Layered Architecture (Arquitetura em Camadas REST)
+**Tipo de Arquitetura:** Arquitetura em camadas (Layered Architecture)
 
 A aplicação é organizada em camadas responsáveis por diferentes partes do sistema:
 
@@ -31,10 +32,9 @@ A aplicação é organizada em camadas responsáveis por diferentes partes do si
 * **Security** — login, token JWT e permissões por perfil (Spring Security).
 * **Client** — chamadas gRPC para a Lana (chat e simulação).
 
-## Comunicação com o Agente (Microsserviço Python)
+## 📢 Comunicação com o Agente (Microsserviço Python)
 
-
-| | Java (Spring) | Python (Lana) |
+|  | Java (Spring) | Python (Lana) |
 |---|---|---|
 | Papel no gRPC | **Cliente** (inicia a chamada) | **Servidor** (escuta e responde) |
 | Classe principal | `IaGrpcClientService` (stub bloqueante) | `IAServiceServicer` |
@@ -47,7 +47,7 @@ Leia mais em: [docs/arquitetura-comunicacao.md](docs/arquitetura-comunicacao.md)
 
 ---
 
-## Estrutura do Projeto
+## 📂 Estrutura do Projeto
 
 ```text
 domrock-backend/
@@ -55,11 +55,6 @@ domrock-backend/
 ├── .devcontainer/         # Configuração do ambiente de desenvolvimento
 ├── .mvn/                  # Arquivos do Maven Wrapper
 ├── docs/                  # Documentação técnica do projeto
-│   ├── comandos.md        # Guia de comandos Maven e Docker
-│   ├── arquitetura-comunicacao.md # Documentação da Arquitetura com gRPC
-│   ├── manual-instalacao.md
-│   ├── guia-importacao.md # Importação das planilhas e entidades
-│   └── domrock-dataset/   # Planilhas da Dom Rock (RH, vendas e % de comissão, jul-dez/2025)
 │
 ├── src/
 │   ├── main/
@@ -97,7 +92,7 @@ domrock-backend/
 
 ---
 
-## Banco de Dados
+## 🐘 Banco de Dados
 
 O projeto utiliza **PostgreSQL 16** como banco de dados relacional principal. As tabelas são criadas pelo **Flyway** ao subir a aplicação, a partir das migrations em `src/main/resources/db/migration/`.
 
@@ -105,7 +100,7 @@ A migration `V4` cria os usuários da demonstração (ver [Usuários da demonstr
 
 ---
 
-## Configuração do Spring Boot
+## ⚙️ Configuração do Spring Boot
 
 O backend **não lê arquivo `.env`**: as configurações vêm de variáveis de ambiente. Há dois modos.
 
@@ -131,7 +126,7 @@ No profile `dev`, qualquer uma dessas variáveis, se definida, substitui o padr�
 
 ---
 
-## Executando o Projeto
+## 💻 Executando o Projeto
 
 Para subir o sistema completo (banco, backend, Lana e frontend) com um comando, use o repositório [domrock-camplana](https://github.com/codedontblow-org/domrock-camplana). As instruções abaixo rodam **só o backend**, para desenvolvimento.
 
@@ -197,7 +192,7 @@ A resposta `200` traz o `token`, o `perfil` e a `validade`.
 
 ---
 
-## Autenticação
+## 🔐 Autenticação
 
 Todas as rotas, exceto o login, exigem o header `Authorization: Bearer <token>`. O token vale 8 horas. Sem token, a resposta é **401**; com um perfil sem permissão, **403**.
 
@@ -248,7 +243,7 @@ A resposta nunca traz a senha: só `id`, `nome`, `email`, `perfil` e `ativo`.
 
 ---
 
-## Desenvolvimento com Dev Container
+## 🐋 Desenvolvimento com Dev Container
 
 O projeto possui configuração de **Dev Container**, permitindo que o ambiente de desenvolvimento seja padronizado utilizando Docker.
 
@@ -270,7 +265,7 @@ DB_URL=jdbc:postgresql://db:5432/postgres ./mvnw spring-boot:run -Dspring-boot.r
 
 ---
 
-## Testes
+## 🧪 Testes
 
 Os testes do projeto estão localizados em:
 
@@ -294,7 +289,7 @@ mvnw.cmd test
 
 ---
 
-## Documentação Complementar
+## 📌 Documentação Complementar
 
 * [docs/comandos.md](docs/comandos.md): principais comandos utilizados no desenvolvimento.
 * [docs/manual-instalacao.md](docs/manual-instalacao.md): passo a passo de instalação.
@@ -303,6 +298,8 @@ mvnw.cmd test
 
 ---
 
-## Licença
+## ⚖️ Licença
 
 Este projeto está sob a licença especificada no arquivo [LICENSE](LICENSE).
+
+> 💣 Code Don't Blow - Onde cortamos o pavio antes dos problemas EXPLODIREM!
