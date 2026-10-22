@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.contains;
@@ -321,7 +322,8 @@ class CampanhaApiTest {
     private void decidir(long campanhaId, StatusCampanha decisao, Usuario supervisor, String justificativa) {
         transacao.executeWithoutResult(tx -> {
             Campanha campanha = campanhaRepository.findById(campanhaId).orElseThrow();
-            CampanhaVersao versao = versaoRepository.findFirstByCampanhaIdOrderByNumeroDesc(campanhaId).orElseThrow();
+            List<CampanhaVersao> versoes = versaoRepository.findByCampanhaIdOrderByNumeroAsc(campanhaId);
+            CampanhaVersao versao = versoes.get(versoes.size() - 1);
             trocaDeStatus.trocar(campanha, decisao, supervisor, versao, justificativa);
         });
     }

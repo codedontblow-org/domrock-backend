@@ -8,16 +8,11 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface CampanhaVersaoRepository extends JpaRepository<CampanhaVersao, Long> {
 
     List<CampanhaVersao> findByCampanhaIdOrderByNumeroAsc(Long campanhaId);
-
-    Optional<CampanhaVersao> findFirstByCampanhaIdOrderByNumeroDesc(Long campanhaId);
-
-    Optional<CampanhaVersao> findByCampanhaIdAndNumero(Long campanhaId, int numero);
 
     /** Fila do Supervisor (5.5): a última versão de cada campanha no status pedido, menos as dele. */
     @Query("""

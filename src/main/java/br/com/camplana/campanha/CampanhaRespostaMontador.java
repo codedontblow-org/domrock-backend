@@ -8,7 +8,6 @@ import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
