@@ -1,5 +1,6 @@
 package br.com.camplana.service;
 
+import br.com.camplana.dto.usuario.ResumoResponse;
 import br.com.camplana.entity.Perfil;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.exception.BadRequestException;
@@ -72,5 +73,13 @@ public class UsuarioServiceImp implements UsuarioService {
         Usuario usuario = findById(id);
         usuario.setAtivo(true);
         return usuarioRepository.save(usuario);
+    }
+
+    @Override
+    public ResumoResponse getResumo() {
+        long total = usuarioRepository.count();
+        long ativos = usuarioRepository.countByAtivoTrue();
+        long desativados = total - ativos;
+        return new ResumoResponse(total, ativos, desativados);
     }
 }

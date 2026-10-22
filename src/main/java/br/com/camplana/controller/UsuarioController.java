@@ -1,5 +1,6 @@
 package br.com.camplana.controller;
 
+import br.com.camplana.dto.usuario.ResumoResponse;
 import br.com.camplana.dto.usuario.UsuarioPostBody;
 import br.com.camplana.dto.usuario.UsuarioPutBody;
 import br.com.camplana.dto.usuario.UsuarioResponse;
@@ -66,5 +67,10 @@ public class UsuarioController {
     public ResponseEntity<UsuarioResponse> reativar(@PathVariable Integer id) {
         Usuario reativado = usuarioService.reativar(id);
         return ResponseEntity.ok(usuarioMapper.toResponse(reativado));
+    }
+
+    @GetMapping("/resumo")
+    public ResponseEntity<ResumoResponse> getResumo() {
+        return ResponseEntity.ok(usuarioService.getResumo());
     }
 }
