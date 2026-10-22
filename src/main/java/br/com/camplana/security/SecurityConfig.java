@@ -44,6 +44,9 @@ public class SecurityConfig {
                     // SUPERVISOR -> DECIDE CAMPANHA
                     req.requestMatchers(HttpMethod.POST, "/api/campanhas/*/decidir").hasRole("SUPERVISOR");
 
+                    // SUPERVISOR -> FILA DE APROVACAO (antes do /** abaixo: vale a primeira linha que casa)
+                    req.requestMatchers(HttpMethod.GET, "/api/campanhas/fila").hasRole("SUPERVISOR");
+
                     // GERENTE e SUPERVISOR -> CRIA CAMPANHA
                     req.requestMatchers("/api/campanhas/**").hasAnyRole("GERENTE", "SUPERVISOR");
 
