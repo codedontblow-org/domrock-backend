@@ -11,6 +11,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -39,7 +41,8 @@ public class UsuarioController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<UsuarioResponse>> listAll(Pageable pageable) {
+    public ResponseEntity<Page<UsuarioResponse>> listAll(
+            @PageableDefault(sort = "nome", direction = Sort.Direction.ASC) Pageable pageable) {
         return ResponseEntity.ok(usuarioService.listAll(pageable).map(usuarioMapper::toResponse));
     }
 
