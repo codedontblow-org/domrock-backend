@@ -14,6 +14,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 
@@ -36,6 +38,7 @@ class RegistroSimulacoesJpaTest {
     @Autowired private CampanhaRepository campanhaRepository;
     @Autowired private UsuarioRepository usuarioRepository;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private ObjectMapper objectMapper;
 
     private Usuario gabriela;
 
@@ -98,17 +101,23 @@ class RegistroSimulacoesJpaTest {
     void cicloDeVidaNoPersistenceServiceEEncerramentoDeInterrompidas() {
         Simulacao inicial = persistenceService.criarSimulacaoInicial(gabriela, "chat-job", null, FICHA);
         assertThat(inicial.getStatus()).isEqualTo(StatusSimulacao.PENDENTE);
+        assertThat(inicial.getEtapa()).isEqualTo(EtapaSimulacao.NA_FILA);
 
-        persistenceService.atualizarEtapa(inicial.getId(), EtapaSimulacao.EXECUTANDO);
+        persistenceService.atualizarEtapa(inicial.getId(), EtapaSimulacao.SIMULANDO);
         Simulacao emExecucao = simulacaoRepository.findById(inicial.getId()).orElseThrow();
         assertThat(emExecucao.getStatus()).isEqualTo(StatusSimulacao.RODANDO);
-        assertThat(emExecucao.getEtapa()).isEqualTo(EtapaSimulacao.EXECUTANDO);
+        assertThat(emExecucao.getEtapa()).isEqualTo(EtapaSimulacao.SIMULANDO);
 
         encerrador.encerrarAoSubir();
         Simulacao encerrada = simulacaoRepository.findById(inicial.getId()).orElseThrow();
         assertThat(encerrada.getStatus()).isEqualTo(StatusSimulacao.ERRO);
-        assertThat(encerrada.getEtapa()).isNull();
-        assertThat(encerrada.getErro()).isEqualTo(SimulacaoPersistenceService.MOTIVO_INTERROMPIDA);
+        assertThat(encerrada.getEtapa()).isEqualTo(EtapaSimulacao.ERRO);
+        assertThat(jdbc.queryForObject("SELECT jsonb_typeof(erro) FROM simulacao WHERE id = ?", String.class, inicial.getId()))
+                .isEqualTo("object");
+
+        JsonNode erroJson = objectMapper.readTree(encerrada.getErro());
+        assertThat(erroJson.path("etapa").asString()).isEqualTo("interrompida");
+        assertThat(erroJson.path("mensagem").asString()).isEqualTo("Simulação interrompida por reinício do servidor.");
         assertThat(encerrada.getConcluidaEm()).isNotNull();
     }
 
@@ -118,6 +127,7 @@ class RegistroSimulacoesJpaTest {
         s.setChatId(chatId);
         s.setCampanha(campanha);
         s.setStatus(status);
+        s.setEtapa(status == StatusSimulacao.CONCLUIDA ? EtapaSimulacao.CONCLUIDA : EtapaSimulacao.SIMULANDO);
         s.setFicha(FICHA);
         s.setResultado(status == StatusSimulacao.CONCLUIDA ? RESULTADO : null);
         s.setCriadaEm(Instant.parse("2026-10-21T12:45:00Z"));

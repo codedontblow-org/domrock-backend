@@ -14,7 +14,7 @@ CREATE TABLE simulacao (
     modelo VARCHAR(100),
     tentativas INT,
     duracao_ms BIGINT,
-    erro TEXT,
+    erro JSONB,
     criada_em TIMESTAMPTZ NOT NULL,
     concluida_em TIMESTAMPTZ,
     CONSTRAINT fk_simulacao_usuario FOREIGN KEY (usuario_id) REFERENCES usuario (id),

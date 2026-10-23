@@ -3,6 +3,7 @@ package br.com.camplana.service;
 import br.com.camplana.dto.simulacao.SimulacaoCriadaResponse;
 import br.com.camplana.dto.simulacao.SimulacaoStatusResponse;
 import br.com.camplana.entity.Campanha;
+import br.com.camplana.entity.Perfil;
 import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
@@ -11,6 +12,7 @@ import br.com.camplana.exception.ConflictException;
 import br.com.camplana.exception.ForbiddenException;
 import br.com.camplana.exception.NotFoundException;
 import br.com.camplana.repository.CampanhaRepository;
+import br.com.camplana.repository.CampanhaVersaoRepository;
 import br.com.camplana.repository.SimulacaoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,44 +33,44 @@ public class SimulacaoManagerService {
     private final SimulacaoJobService jobService;
     private final SimulacaoRepository simulacaoRepository;
     private final CampanhaRepository campanhaRepository;
+    private final CampanhaVersaoRepository campanhaVersaoRepository;
     private final ObjectMapper objectMapper;
 
     public SimulacaoManagerService(SimulacaoPersistenceService persistenceService,
                                    SimulacaoJobService jobService,
                                    SimulacaoRepository simulacaoRepository,
                                    CampanhaRepository campanhaRepository,
+                                   CampanhaVersaoRepository campanhaVersaoRepository,
                                    ObjectMapper objectMapper) {
         this.persistenceService = persistenceService;
         this.jobService = jobService;
         this.simulacaoRepository = simulacaoRepository;
         this.campanhaRepository = campanhaRepository;
+        this.campanhaVersaoRepository = campanhaVersaoRepository;
         this.objectMapper = objectMapper;
     }
 
     public SimulacaoCriadaResponse iniciarSimulacao(JsonNode body, Usuario usuario) {
         String chatId = extrairChatIdValido(body);
-        JsonNode fichaNode = extrairFichaValida(body);
+        JsonNode regraNode = extrairRegraValida(body);
 
         Campanha campanha = validarConversaECampanha(chatId, usuario);
-        String fichaJson = objectMapper.writeValueAsString(fichaNode);
+        String fichaJson = objectMapper.writeValueAsString(regraNode);
 
         Simulacao criada = persistenceService.criarSimulacaoInicial(usuario, chatId, campanha, fichaJson);
 
         Map<String, Object> payloadLana = Map.of(
                 "chat_id", chatId,
-                "regra", fichaNode
+                "regra", regraNode
         );
         try {
             jobService.processarSimulacaoAsync(criada.getId(), payloadLana);
         } catch (Exception ex) {
-            String erroSubmissao = ex.getMessage() != null && !ex.getMessage().isBlank()
-                    ? ex.getMessage()
-                    : "Falha ao enfileirar a execução assíncrona da simulação.";
-            persistenceService.falharSimulacao(criada.getId(), erroSubmissao);
+            persistenceService.falharSimulacao(criada.getId(), SimulacaoJobService.ERRO_INTERNO);
             throw ex;
         }
 
-        return new SimulacaoCriadaResponse(criada.getId(), criada.getStatus());
+        return new SimulacaoCriadaResponse(criada.getId(), criada.getStatus(), criada.getEtapa());
     }
 
     @Transactional(readOnly = true)
@@ -76,20 +78,36 @@ public class SimulacaoManagerService {
         Simulacao simulacao = simulacaoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Simulação " + id + " não encontrada"));
 
-        if (!Objects.equals(simulacao.getUsuario().getId(), usuario.getId())) {
-            throw new ForbiddenException("A simulação " + id + " pertence a outro usuário");
-        }
+        exigirPermissaoLeitura(simulacao, usuario);
+
+        Long campanhaId = simulacao.getCampanha() != null ? simulacao.getCampanha().getId() : null;
 
         return new SimulacaoStatusResponse(
                 simulacao.getId(),
                 simulacao.getStatus(),
                 simulacao.getEtapa(),
+                simulacao.getChatId(),
+                campanhaId,
+                simulacao.getCriadaEm(),
+                simulacao.getConcluidaEm(),
+                simulacao.getDuracaoMs(),
                 simulacao.getFicha(),
                 simulacao.getResultado(),
-                simulacao.getErro(),
-                simulacao.getCriadaEm(),
-                simulacao.getConcluidaEm()
+                simulacao.getErro()
         );
+    }
+
+    private void exigirPermissaoLeitura(Simulacao simulacao, Usuario leitor) {
+        boolean ehAutor = Objects.equals(simulacao.getUsuario().getId(), leitor.getId());
+        if (ehAutor) {
+            return;
+        }
+        boolean supervisorComCampanhaSubmetida = leitor.getPerfil() == Perfil.SUPERVISOR
+                && simulacao.getCampanha() != null
+                && campanhaVersaoRepository.existsByCampanhaId(simulacao.getCampanha().getId());
+        if (!supervisorComCampanhaSubmetida) {
+            throw new ForbiddenException("A simulação " + simulacao.getId() + " pertence a outro usuário");
+        }
     }
 
     private Campanha validarConversaECampanha(String chatId, Usuario usuario) {
@@ -127,15 +145,11 @@ public class SimulacaoManagerService {
         return chatId;
     }
 
-    private static JsonNode extrairFichaValida(JsonNode body) {
+    private static JsonNode extrairRegraValida(JsonNode body) {
         JsonNode regra = body.path("regra");
         if (regra.isObject() && !regra.isEmpty()) {
             return regra;
         }
-        JsonNode ficha = body.path("ficha");
-        if (ficha.isObject() && !ficha.isEmpty()) {
-            return ficha;
-        }
-        throw new BadRequestException("Esperado objeto não vazio em \"regra\" ou \"ficha\" no corpo; recebido " + body);
+        throw new BadRequestException("Esperado {\"regra\": {...}} no corpo; recebido " + body);
     }
 }

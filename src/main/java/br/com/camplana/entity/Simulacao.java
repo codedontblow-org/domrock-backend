@@ -63,7 +63,8 @@ public class Simulacao {
     @Column(name = "duracao_ms")
     private Long duracaoMs;
 
-    @Column(columnDefinition = "text")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
     private String erro;
 
     @Column(name = "criada_em", nullable = false, updatable = false)

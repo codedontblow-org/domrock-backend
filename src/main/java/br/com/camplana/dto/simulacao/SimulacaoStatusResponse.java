@@ -11,9 +11,12 @@ public record SimulacaoStatusResponse(
         Long id,
         StatusSimulacao status,
         String etapa,
+        @JsonProperty("chat_id") String chatId,
+        @JsonProperty("campanha_id") Long campanhaId,
+        @JsonProperty("criada_em") Instant criadaEm,
+        @JsonProperty("concluida_em") Instant concluidaEm,
+        @JsonProperty("duracao_ms") Long duracaoMs,
         @JsonRawValue String ficha,
         @JsonRawValue String resultado,
-        String erro,
-        @JsonProperty("criada_em") Instant criadaEm,
-        @JsonProperty("concluida_em") Instant concluidaEm
+        @JsonRawValue String erro
 ) {}

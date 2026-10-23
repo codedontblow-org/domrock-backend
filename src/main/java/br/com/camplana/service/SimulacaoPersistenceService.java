@@ -1,6 +1,7 @@
 package br.com.camplana.service;
 
 import br.com.camplana.entity.Campanha;
+import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusSimulacao;
 import br.com.camplana.entity.Usuario;
@@ -21,7 +22,7 @@ import java.util.List;
 public class SimulacaoPersistenceService {
 
     public static final String MOTIVO_INTERROMPIDA =
-            "Simulação interrompida porque o backend reiniciou durante o processamento; simule novamente.";
+            "{\"etapa\":\"interrompida\",\"mensagem\":\"Simulação interrompida por reinício do servidor.\"}";
 
     private static final List<StatusSimulacao> STATUS_EM_ANDAMENTO = List.of(
             StatusSimulacao.PENDENTE,
@@ -43,6 +44,7 @@ public class SimulacaoPersistenceService {
         simulacao.setChatId(chatId);
         simulacao.setCampanha(campanha);
         simulacao.setStatus(StatusSimulacao.PENDENTE);
+        simulacao.setEtapa(EtapaSimulacao.NA_FILA);
         simulacao.setFicha(fichaJson);
         simulacao.setCriadaEm(Instant.now(relogio));
         return simulacaoRepository.saveAndFlush(simulacao);
@@ -62,7 +64,7 @@ public class SimulacaoPersistenceService {
                                   String codigoGerado, String modelo, Integer tentativas, Long duracaoMs) {
         simulacaoRepository.findById(id).ifPresent(simulacao -> {
             simulacao.setStatus(StatusSimulacao.CONCLUIDA);
-            simulacao.setEtapa(null);
+            simulacao.setEtapa(EtapaSimulacao.CONCLUIDA);
             simulacao.setResultado(resultadoJson);
             simulacao.setTrilha(trilhaJson);
             simulacao.setCodigoGerado(codigoGerado);
@@ -76,8 +78,8 @@ public class SimulacaoPersistenceService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void falharSimulacao(Long id, String mensagemErro) {
-        simulacaoRepository.findById(id).ifPresent(simulacao -> marcarErro(simulacao, mensagemErro));
+    public void falharSimulacao(Long id, String erroJson) {
+        simulacaoRepository.findById(id).ifPresent(simulacao -> marcarErro(simulacao, erroJson));
     }
 
     @Transactional
@@ -87,10 +89,10 @@ public class SimulacaoPersistenceService {
         return interrompidas.size();
     }
 
-    private void marcarErro(Simulacao simulacao, String mensagemErro) {
+    private void marcarErro(Simulacao simulacao, String erroJson) {
         simulacao.setStatus(StatusSimulacao.ERRO);
-        simulacao.setEtapa(null);
-        simulacao.setErro(mensagemErro);
+        simulacao.setEtapa(EtapaSimulacao.ERRO);
+        simulacao.setErro(erroJson);
         simulacao.setConcluidaEm(Instant.now(relogio));
         simulacaoRepository.saveAndFlush(simulacao);
     }

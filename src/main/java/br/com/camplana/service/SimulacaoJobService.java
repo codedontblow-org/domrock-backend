@@ -11,12 +11,23 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+
 /**
- * Executa a simulação em background (A6-66): avança pelas etapas, chama a Lana e grava o resultado
- * ou o erro legível.
+ * Executa a simulação em background (A6-66): marca "Simulando", chama a Lana e grava o resultado
+ * ("Concluída") ou o objeto de erro ("Erro") conforme o contrato 4.2.
  */
 @Service
 public class SimulacaoJobService {
+
+    public static final String ERRO_LANA_INDISPONIVEL =
+            "{\"etapa\":\"lana_indisponivel\",\"mensagem\":\"Lana indisponível em /simulacao\"}";
+    public static final String ERRO_TEMPO =
+            "{\"etapa\":\"tempo\",\"mensagem\":\"Tempo limite excedido na simulação.\"}";
+    public static final String ERRO_INTERNO =
+            "{\"etapa\":\"erro_interno\",\"mensagem\":\"Erro inesperado ao processar a simulação.\"}";
 
     private static final Logger log = LoggerFactory.getLogger(SimulacaoJobService.class);
 
@@ -38,19 +49,15 @@ public class SimulacaoJobService {
         long inicioMs = System.currentTimeMillis();
 
         try {
-            persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.CARREGANDO_BASES);
-            persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.GERANDO_CODIGO);
-            persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.EXECUTANDO);
+            persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.SIMULANDO);
 
             JsonNode resposta = lanaSimulacaoClient.simular(payloadLana);
 
-            persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.CONFERINDO);
-
             String resultadoJson = extrairResultadoJson(resposta);
             String trilhaJson = extrairJsonOuNull(resposta, "trilha");
-            String codigoGerado = extrairTexto(resposta, "codigo_gerado", "codigo");
-            String modelo = extrairTexto(resposta, "modelo");
-            Integer tentativas = extrairInteiro(resposta, "tentativas");
+            String codigoGerado = extrairCodigo(resposta);
+            String modelo = extrairModelo(resposta);
+            Integer tentativas = extrairTentativas(resposta);
             Long duracaoMs = extrairLong(resposta, "duracao_ms", "duracao");
             if (duracaoMs == null) {
                 duracaoMs = Math.max(0L, System.currentTimeMillis() - inicioMs);
@@ -68,18 +75,16 @@ public class SimulacaoJobService {
             log.info("Simulação #{} concluída com sucesso em {} ms", simulacaoId, duracaoMs);
 
         } catch (LanaRespostaException ex) {
-            String mensagem = extrairMensagemLegivel(ex.getCorpo());
-            log.warn("Simulação #{} falhou na Lana (HTTP {}): {}", simulacaoId, ex.getStatus(), mensagem);
-            persistenceService.falharSimulacao(simulacaoId, mensagem);
+            String erroJson = normalizarErroDaLana(ex.getCorpo());
+            log.warn("Simulação #{} falhou na Lana (HTTP {}): {}", simulacaoId, ex.getStatus(), erroJson);
+            persistenceService.falharSimulacao(simulacaoId, erroJson);
         } catch (LanaIndisponivelException ex) {
-            log.error("Simulação #{} falhou por indisponibilidade da Lana: {}", simulacaoId, ex.getMessage());
-            persistenceService.falharSimulacao(simulacaoId, ex.getMessage());
+            String erroJson = ehTimeout(ex) ? ERRO_TEMPO : ERRO_LANA_INDISPONIVEL;
+            log.error("Simulação #{} falhou na chamada à Lana: {}", simulacaoId, ex.getMessage());
+            persistenceService.falharSimulacao(simulacaoId, erroJson);
         } catch (Exception ex) {
-            String mensagem = ex.getMessage() != null && !ex.getMessage().isBlank()
-                    ? ex.getMessage()
-                    : "Erro inesperado ao processar a simulação.";
-            log.error("Simulação #{} falhou com erro inesperado: {}", simulacaoId, mensagem, ex);
-            persistenceService.falharSimulacao(simulacaoId, mensagem);
+            log.error("Simulação #{} falhou com erro inesperado: {}", simulacaoId, ex.getMessage(), ex);
+            persistenceService.falharSimulacao(simulacaoId, ERRO_INTERNO);
         }
     }
 
@@ -105,26 +110,47 @@ public class SimulacaoJobService {
         return objectMapper.writeValueAsString(node);
     }
 
-    private static String extrairTexto(JsonNode resposta, String... campos) {
+    private static String extrairCodigo(JsonNode resposta) {
         if (resposta == null) {
             return null;
         }
-        for (String campo : campos) {
-            JsonNode node = resposta.path(campo);
-            if (!node.isMissingNode() && !node.isNull() && node.isString()) {
-                return node.asString();
-            }
+        JsonNode codigo = resposta.path("codigo");
+        if (codigo.isString()) {
+            return codigo.asString();
+        }
+        JsonNode codigoGerado = resposta.path("codigo_gerado");
+        if (codigoGerado.isString()) {
+            return codigoGerado.asString();
         }
         return null;
     }
 
-    private static Integer extrairInteiro(JsonNode resposta, String campo) {
+    private static String extrairModelo(JsonNode resposta) {
         if (resposta == null) {
             return null;
         }
-        JsonNode node = resposta.path(campo);
-        if (!node.isMissingNode() && !node.isNull() && node.isNumber()) {
-            return node.intValue();
+        JsonNode modeloTrilha = resposta.path("trilha").path("modelo");
+        if (modeloTrilha.isString()) {
+            return modeloTrilha.asString();
+        }
+        JsonNode modeloRaiz = resposta.path("modelo");
+        if (modeloRaiz.isString()) {
+            return modeloRaiz.asString();
+        }
+        return null;
+    }
+
+    private static Integer extrairTentativas(JsonNode resposta) {
+        if (resposta == null) {
+            return null;
+        }
+        JsonNode tentativasTrilha = resposta.path("trilha").path("tentativas");
+        if (tentativasTrilha.isNumber()) {
+            return tentativasTrilha.intValue();
+        }
+        JsonNode tentativasRaiz = resposta.path("tentativas");
+        if (tentativasRaiz.isNumber()) {
+            return tentativasRaiz.intValue();
         }
         return null;
     }
@@ -142,21 +168,37 @@ public class SimulacaoJobService {
         return null;
     }
 
-    String extrairMensagemLegivel(String corpoErro) {
-        if (corpoErro == null || corpoErro.isBlank()) {
-            return "A Lana recusou a simulação sem detalhar o motivo.";
-        }
-        try {
-            JsonNode json = objectMapper.readTree(corpoErro);
-            for (String chave : new String[]{"mensagem", "message", "detail", "erro", "error"}) {
-                JsonNode valor = json.path(chave);
-                if (valor.isString() && !valor.asString().isBlank()) {
-                    return valor.asString().strip();
+    private static boolean ehTimeout(Throwable erro) {
+        Throwable atual = erro;
+        while (atual != null) {
+            String msg = atual.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase(Locale.ROOT);
+                if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("tempo limite")) {
+                    return true;
                 }
             }
-        } catch (Exception ignorado) {
-            // corpo não é JSON estruturado; usa texto limpo abaixo
+            atual = atual.getCause();
         }
-        return corpoErro.strip();
+        return false;
+    }
+
+    String normalizarErroDaLana(String corpoErro) {
+        if (corpoErro != null && !corpoErro.isBlank()) {
+            try {
+                JsonNode json = objectMapper.readTree(corpoErro);
+                if (json.isObject()) {
+                    return objectMapper.writeValueAsString(json);
+                }
+            } catch (Exception ignorado) {
+                // cai no fallback abaixo
+            }
+        }
+        Map<String, String> fallback = new LinkedHashMap<>();
+        fallback.put("etapa", "validacao");
+        fallback.put("mensagem", corpoErro != null && !corpoErro.isBlank()
+                ? corpoErro.strip()
+                : "A Lana recusou a simulação.");
+        return objectMapper.writeValueAsString(fallback);
     }
 }
