@@ -1,18 +1,20 @@
 package br.com.camplana.controller;
 
 import br.com.camplana.client.LanaClient;
-import br.com.camplana.client.LanaSimulacaoClient;
 import br.com.camplana.dto.ChatRequest;
-import br.com.camplana.entity.Perfil;
-import br.com.camplana.entity.Usuario;
-import br.com.camplana.exception.LanaIndisponivelException;
-import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.entity.*;
+import br.com.camplana.handler.GlobalExceptionHandler;
+import br.com.camplana.handler.SecurityErrorHandler;
+import br.com.camplana.repository.CampanhaRepository;
+import br.com.camplana.repository.SimulacaoRepository;
 import br.com.camplana.repository.UsuarioRepository;
 import br.com.camplana.security.JwtService;
 import br.com.camplana.security.PasswordConfig;
 import br.com.camplana.security.SecurityConfig;
-import br.com.camplana.handler.SecurityErrorHandler;
 import br.com.camplana.security.UsuarioDetailsService;
+import br.com.camplana.service.SimulacaoJobService;
+import br.com.camplana.service.SimulacaoManagerService;
+import br.com.camplana.service.SimulacaoPersistenceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,13 +25,16 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,9 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         controllers = {ChatController.class, SimulacaoController.class},
         properties = "api.security.token.secret=segredo-de-teste-com-mais-de-32-caracteres"
 )
-
-@Import({SecurityConfig.class, SecurityErrorHandler.class, JwtService.class,
-        UsuarioDetailsService.class, PasswordConfig.class})
+@Import({SecurityConfig.class, SecurityErrorHandler.class, GlobalExceptionHandler.class, JwtService.class,
+        UsuarioDetailsService.class, PasswordConfig.class, SimulacaoManagerService.class})
 class LanaControllersTests {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -55,21 +59,40 @@ class LanaControllersTests {
     private LanaClient lanaClient;
 
     @MockitoBean
-    private LanaSimulacaoClient lanaSimulacaoClient;
+    private SimulacaoPersistenceService persistenceService;
+
+    @MockitoBean
+    private SimulacaoJobService jobService;
+
+    @MockitoBean
+    private SimulacaoRepository simulacaoRepository;
+
+    @MockitoBean
+    private CampanhaRepository campanhaRepository;
 
     @MockitoBean
     private UsuarioRepository usuarioRepository;
 
+    private Usuario sergio;
+    private Usuario gabriela;
     private String autorizacao;
 
     @BeforeEach
     void autenticarComoSupervisor() {
-        var sergio = new Usuario();
+        sergio = new Usuario();
         sergio.setId(2);
         sergio.setNome("Sérgio");
         sergio.setEmail("sergio@camplana.com.br");
         sergio.setPerfil(Perfil.SUPERVISOR);
         sergio.setAtivo(true);
+
+        gabriela = new Usuario();
+        gabriela.setId(1);
+        gabriela.setNome("Gabriela");
+        gabriela.setEmail("gabriela@camplana.com.br");
+        gabriela.setPerfil(Perfil.GERENTE);
+        gabriela.setAtivo(true);
+
         given(usuarioRepository.findByEmailIgnoreCase(sergio.getEmail())).willReturn(Optional.of(sergio));
         autorizacao = "Bearer " + jwtService.gerarToken(sergio, jwtService.getExpirationDate());
     }
@@ -109,32 +132,106 @@ class LanaControllersTests {
     }
 
     @Test
-    void simulacaoRecusaCorpoSemRegra() throws Exception {
+    void simulacaoCriaJobAssincronoEDevolve202() throws Exception {
+        Simulacao criada = new Simulacao();
+        criada.setId(99L);
+        criada.setUsuario(sergio);
+        criada.setChatId("c1");
+        criada.setStatus(StatusSimulacao.PENDENTE);
+
+        given(simulacaoRepository.findFirstByChatIdOrderByIdAsc("c1")).willReturn(Optional.empty());
+        given(campanhaRepository.findByChatId("c1")).willReturn(Optional.empty());
+        given(persistenceService.criarSimulacaoInicial(any(), eq("c1"), eq(null), any())).willReturn(criada);
+
         mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chat_id\":\"c1\",\"regra\":{\"rule_id\":\"r1\"}}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value(99))
+                .andExpect(jsonPath("$.status").value("PENDENTE"));
+
+        then(jobService).should().processarSimulacaoAsync(eq(99L), any());
+    }
+
+    @Test
+    void simulacaoRecusaCorpoSemChatIdOuSemRegra() throws Exception {
+        mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"regra\":{\"rule_id\":\"r1\"}}"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(lanaSimulacaoClient);
+        mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chat_id\":\"c1\",\"regra\":{}}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(persistenceService, jobService);
     }
 
     @Test
-    void simulacaoRepassaOErro422DaLanaParaOFront() throws Exception {
-        given(lanaSimulacaoClient.simular(any())).willThrow(
-                new LanaRespostaException(422, "{\"etapa\":\"validacao\",\"mensagem\":\"Regra incompleta\"}"));
+    void simulacaoResponde403QuandoConversaPertenceAOutroUsuario() throws Exception {
+        Simulacao deOutro = new Simulacao();
+        deOutro.setId(10L);
+        deOutro.setUsuario(gabriela);
+        deOutro.setChatId("chat-gabriela");
+        given(simulacaoRepository.findFirstByChatIdOrderByIdAsc("chat-gabriela")).willReturn(Optional.of(deOutro));
 
         mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"regra\":{}}"))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.etapa").value("validacao"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chat_id\":\"chat-gabriela\",\"regra\":{\"rule_id\":\"r1\"}}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(persistenceService, jobService);
     }
 
     @Test
-    void simulacaoResponde502QuandoALanaEstaFora() throws Exception {
-        given(lanaSimulacaoClient.simular(any())).willThrow(new LanaIndisponivelException("Lana indisponível"));
+    void simulacaoResponde409QuandoCampanhaDaConversaNaoEstaEmRascunho() throws Exception {
+        Campanha campanha = new Campanha();
+        campanha.setId(15L);
+        campanha.setAutor(sergio);
+        campanha.setChatId("chat-submetida");
+        campanha.setStatus(StatusCampanha.AGUARDANDO_APROVACAO);
+
+        given(simulacaoRepository.findFirstByChatIdOrderByIdAsc("chat-submetida")).willReturn(Optional.empty());
+        given(campanhaRepository.findByChatId("chat-submetida")).willReturn(Optional.of(campanha));
 
         mockMvc.perform(post("/api/simulacoes").header("Authorization", autorizacao)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"regra\":{}}"))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.message").value("Lana indisponível"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chat_id\":\"chat-submetida\",\"regra\":{\"rule_id\":\"r1\"}}"))
+                .andExpect(status().isConflict());
+
+        verifyNoInteractions(persistenceService, jobService);
+    }
+
+    @Test
+    void buscarSimulacaoPorIdRetorna200ComStatusEtapaEResultado() throws Exception {
+        Simulacao simulacao = new Simulacao();
+        simulacao.setId(99L);
+        simulacao.setUsuario(sergio);
+        simulacao.setChatId("c1");
+        simulacao.setStatus(StatusSimulacao.CONCLUIDA);
+        simulacao.setFicha("{\"rule_id\":\"r1\"}");
+        simulacao.setResultado("{\"totais\":{\"diferenca\":23736.10}}");
+        simulacao.setCriadaEm(Instant.parse("2026-10-21T12:58:00Z"));
+        simulacao.setConcluidaEm(Instant.parse("2026-10-21T12:59:00Z"));
+
+        given(simulacaoRepository.findById(99L)).willReturn(Optional.of(simulacao));
+
+        mockMvc.perform(get("/api/simulacoes/99").header("Authorization", autorizacao))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(99))
+                .andExpect(jsonPath("$.status").value("CONCLUIDA"))
+                .andExpect(jsonPath("$.ficha.rule_id").value("r1"))
+                .andExpect(jsonPath("$.resultado.totais.diferenca").value(23736.10))
+                .andExpect(jsonPath("$.criada_em").value("2026-10-21T12:58:00Z"))
+                .andExpect(jsonPath("$.concluida_em").value("2026-10-21T12:59:00Z"));
+    }
+
+    @Test
+    void buscarSimulacaoInexistenteRetorna404() throws Exception {
+        given(simulacaoRepository.findById(404L)).willReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/simulacoes/404").header("Authorization", autorizacao))
+                .andExpect(status().isNotFound());
     }
 }
