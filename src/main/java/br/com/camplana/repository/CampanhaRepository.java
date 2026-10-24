@@ -23,6 +23,8 @@ public interface CampanhaRepository extends JpaRepository<Campanha, Long> {
     @Query("SELECT c FROM Campanha c JOIN FETCH c.autor WHERE c.id = :id")
     Optional<Campanha> findComAutor(@Param("id") Long id);
 
+    Optional<Campanha> findByChatId(String chatId);
+
     List<Campanha> findByAutorIdAndStatusOrderByAtualizadaEmDesc(Integer autorId, StatusCampanha status);
 
     List<Campanha> findByAutorIdAndStatusNotOrderByAtualizadaEmDesc(Integer autorId, StatusCampanha status);

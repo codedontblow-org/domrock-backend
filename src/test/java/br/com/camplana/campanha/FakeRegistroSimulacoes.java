@@ -1,5 +1,8 @@
 package br.com.camplana.campanha;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -10,8 +13,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Registro de simulações em memória, no lugar da tabela {@code simulacao} do A6-66, que ainda não
- * existe. Uma simulação pertence à campanha da sua conversa, como o contrato 4.1 manda.
+ * Registro de simulações para os testes de campanha ({@link CampanhaApiTest}): permite fixar o ID
+ * exato de cada simulação (ex.: 345, 350) satisfazendo a FK {@code fk_versao_simulacao} da V8.
  */
 public class FakeRegistroSimulacoes implements RegistroSimulacoes {
 
@@ -27,23 +30,50 @@ public class FakeRegistroSimulacoes implements RegistroSimulacoes {
 
     private static final Instant PRIMEIRA_CONCLUSAO = Instant.parse("2026-10-21T12:59:02Z");
 
+    private final JdbcTemplate jdbc;
     private final Map<Long, SimulacaoGravada> simulacoes = new LinkedHashMap<>();
     private final Map<String, Long> campanhaDaConversa = new HashMap<>();
+
+    public FakeRegistroSimulacoes() {
+        this(null);
+    }
+
+    public FakeRegistroSimulacoes(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
 
     public void limpar() {
         simulacoes.clear();
         campanhaDaConversa.clear();
+        if (jdbc != null) {
+            jdbc.execute("DELETE FROM simulacao");
+        }
     }
 
     /** Simulação concluída da Black Friday; ids maiores terminam depois. */
     public void concluida(long id, int usuarioId, String chatId) {
+        Instant concluidaEm = PRIMEIRA_CONCLUSAO.plusSeconds(id);
         simulacoes.put(id, new SimulacaoGravada(id, usuarioId, chatId, "CONCLUIDA",
-                REGRA_BLACK_FRIDAY, RESULTADO_BLACK_FRIDAY, PRIMEIRA_CONCLUSAO.plusSeconds(id)));
+                REGRA_BLACK_FRIDAY, RESULTADO_BLACK_FRIDAY, concluidaEm));
+        inserirNoBanco(id, usuarioId, chatId, "CONCLUIDA", RESULTADO_BLACK_FRIDAY, concluidaEm);
     }
 
     public void rodando(long id, int usuarioId, String chatId) {
         simulacoes.put(id, new SimulacaoGravada(id, usuarioId, chatId, "RODANDO",
                 REGRA_BLACK_FRIDAY, null, null));
+        inserirNoBanco(id, usuarioId, chatId, "RODANDO", null, null);
+    }
+
+    private void inserirNoBanco(long id, int usuarioId, String chatId, String status, String resultado, Instant concluidaEm) {
+        if (jdbc == null) {
+            return;
+        }
+        jdbc.update("""
+                INSERT INTO simulacao (id, usuario_id, chat_id, status, ficha, resultado, criada_em, concluida_em)
+                VALUES (?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?)
+                """,
+                id, usuarioId, chatId, status, REGRA_BLACK_FRIDAY, resultado,
+                Timestamp.from(PRIMEIRA_CONCLUSAO), concluidaEm == null ? null : Timestamp.from(concluidaEm));
     }
 
     @Override
