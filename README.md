@@ -48,9 +48,11 @@ domrock-backend/
 ├── src/
 │   ├── main/
 │   │   ├── java/br/com/camplana/
+│   │   │   ├── campanha/     # Campanha: transições, permissões, versões e resposta (A6-64)
 │   │   │   ├── client/       # Cliente HTTP da Lana
+│   │   │   ├── config/       # Relógio injetável (Clock)
 │   │   │   ├── controller/   # Controllers REST
-│   │   │   ├── dto/          # Corpos de requisição e resposta (auth, usuario)
+│   │   │   ├── dto/          # Corpos de requisição e resposta (auth, usuario, importacao, campanha)
 │   │   │   ├── entity/       # Entidades JPA
 │   │   │   ├── exception/    # Exceções e formato único de erro (ErroResponse)
 │   │   │   ├── handler/      # Tratamento de erros (GlobalExceptionHandler, 401/403)
@@ -84,7 +86,7 @@ domrock-backend/
 
 O projeto utiliza **PostgreSQL 16** como banco de dados relacional principal. As tabelas são criadas pelo **Flyway** ao subir a aplicação, a partir das migrations em `src/main/resources/db/migration/`.
 
-A migration `V4` cria os usuários da demonstração (ver [Usuários da demonstração](#usuários-da-demonstração)).
+A migration `V4` cria os usuários da demonstração (ver [Usuários da demonstração](#usuários-da-demonstração)). A `V7` cria as tabelas da campanha: `campanha`, `campanha_versao` (imutável) e `campanha_status_log` (ver [Campanhas](#campanhas)).
 
 ---
 
@@ -187,8 +189,8 @@ Todas as rotas, exceto o login, exigem o header `Authorization: Bearer <token>`.
 | --- | --- | --- | --- |
 | `POST /api/auth/login` | sim | sim | sim |
 | `POST /api/chat` e `POST /api/simulacoes` | sim | sim | não |
-| `/api/campanhas/**` (Sprint 2) | sim | sim | não |
-| `POST /api/campanhas/{id}/decidir` (Sprint 2) | não | sim | não |
+| `/api/campanhas/**` (ver [Campanhas](#campanhas)) | sim | sim | não |
+| `GET /api/campanhas/fila` e `POST /api/campanhas/{id}/decidir` (o decidir entra no A6-68) | não | sim | não |
 | `/api/importacao/**` (importação da base do mês; ver [docs/guia_importacao.md](docs/guia_importacao.md)) | não | sim | não |
 | `/api/usuarios/**` (ver [Gestão de usuários](#gestão-de-usuários)) | não | não | sim |
 
@@ -227,6 +229,27 @@ A resposta nunca traz a senha: só `id`, `nome`, `email`, `perfil` e `ativo`.
 - O e-mail é comparado sem diferenciar maiúsculas no cadastro, na edição e no login (`Ana@camplana.com.br` entra como `ana@camplana.com.br`).
 - Editar o e-mail de um usuário invalida o token dele (o token guarda o e-mail): ele precisa entrar de novo.
 - Com as duas travas do Administrador, sempre sobra pelo menos um Administrador ativo.
+
+### Campanhas
+
+A conversa simulada vira campanha, com uma versão congelada a cada submissão e o log de toda mudança de status (A6-64). O formato de cada resposta está na seção 5 de `domrock-camplana/docs/contratos-sprint-2.md`.
+
+| Rota | O que faz | Erros |
+| --- | --- | --- |
+| `POST /api/campanhas` | Salva a conversa como campanha em `RASCUNHO`. Corpo: `nome`, `chat_id` e `simulacao_id`; a ficha e o resultado vêm da simulação gravada. Responde `201` | `400` simulação inexistente, não concluída ou de outro chat; `403` conversa de outro usuário; `409` a conversa já tem campanha |
+| `GET /api/campanhas/minhas` | As campanhas do usuário, menos as arquivadas; `?status=ARQUIVADA` (ou outro status) filtra | `400` status inválido |
+| `GET /api/campanhas/fila` | Só Supervisor: as versões que aguardam aprovação, menos as que ele submeteu, da mais antiga para a mais nova | |
+| `GET /api/campanhas/{id}` | A campanha, com `acoes`, versões e log. O autor sempre vê; os Supervisores, depois da primeira submissão | `403`, `404` |
+| `GET /api/campanhas/{id}/versoes/{numero}` | A versão congelada: ficha, resultado e decisão | `403`, `404` |
+| `PUT /api/campanhas/{id}` | Renomeia (`nome`, até 150 caracteres). Só em `RASCUNHO` | `400`, `403`, `409` |
+| `POST /api/campanhas/{id}/submeter` | Congela a última simulação concluída numa versão nova (v1, v2, ...) e vai para `AGUARDANDO_APROVACAO` | `400` sem simulação concluída, ou sem simulação nova desde a última versão; `409` com simulação rodando |
+| `POST /api/campanhas/{id}/editar` | `REPROVADA` → `RASCUNHO` | `403`, `409` |
+| `POST /api/campanhas/{id}/arquivar` | `RASCUNHO` ou `REPROVADA` → `ARQUIVADA` | `403`, `409` |
+
+- **Front burro:** a campanha traz `acoes`, a lista do que quem está vendo pode fazer agora (`RENOMEAR`, `SUBMETER`, `EDITAR`, `ARQUIVAR`). A mesma regra (`PermissoesCampanha`) monta a lista e barra a rota, então o front mostra um botão por item sem repetir regra nenhuma.
+- Ação de quem não criou a campanha → `403`; transição fora da tabela (ex.: `APROVADA` → `RASCUNHO`) → `409` com o status atual e o pedido.
+- `vigencia` (`FUTURA`, `VIGENTE`, `ENCERRADA`) e `em_simulacao` são calculados na leitura, nunca gravados.
+- **Até o A6-66:** a tabela de simulações ainda não existe. O `RegistroSimulacoesVazio` não acha nenhuma simulação, então salvar responde `400`. Quando o A6-66 entrar, só essa classe é trocada.
 
 ---
 
