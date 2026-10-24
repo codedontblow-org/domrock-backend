@@ -60,6 +60,11 @@ public class GlobalExceptionHandler {
         return erro(status, ex.getReason() != null ? ex.getReason() : ex.getMessage(), req);
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErroResponse> handleForbidden(ForbiddenException ex, HttpServletRequest req) {
+        return erro(HttpStatus.FORBIDDEN, ex.getMessage(), req);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErroResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
                                                                      HttpServletRequest req) {
