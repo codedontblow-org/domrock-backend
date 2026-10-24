@@ -8,7 +8,9 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(properties = {
 		"api.security.token.secret=segredo-de-teste-com-mais-de-32-caracteres",
 		"spring.flyway.placeholders.lana_db_password=lana_leitura",
-		"lana.url=http://localhost:8000"
+		"lana.url=http://localhost:8000",
+		"grpc.lana.host=localhost",
+		"grpc.lana.port=50051"
 })
 class CamplanaApplicationTests {
 
