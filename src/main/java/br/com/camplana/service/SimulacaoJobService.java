@@ -50,36 +50,14 @@ public class SimulacaoJobService {
 
         try {
             persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.SIMULANDO);
-
-            JsonNode resposta = lanaSimulacaoClient.simular(payloadLana);
-
-            String resultadoJson = extrairResultadoJson(resposta);
-            String trilhaJson = extrairJsonOuNull(resposta, "trilha");
-            String codigoGerado = extrairCodigo(resposta);
-            String modelo = extrairModelo(resposta);
-            Integer tentativas = extrairTentativas(resposta);
-            Long duracaoMs = extrairLong(resposta, "duracao_ms", "duracao");
-            if (duracaoMs == null) {
-                duracaoMs = Math.max(0L, System.currentTimeMillis() - inicioMs);
-            }
-
-            persistenceService.concluirSimulacao(
-                    simulacaoId,
-                    resultadoJson,
-                    trilhaJson,
-                    codigoGerado,
-                    modelo,
-                    tentativas,
-                    duracaoMs
-            );
-            log.info("Simulação #{} concluída com sucesso em {} ms", simulacaoId, duracaoMs);
-
+            JsonNode resposta = exigirObjeto(lanaSimulacaoClient.simular(payloadLana));
+            concluir(simulacaoId, resposta, inicioMs);
         } catch (LanaRespostaException ex) {
             String erroJson = normalizarErroDaLana(ex.getCorpo());
             log.warn("Simulação #{} falhou na Lana (HTTP {}): {}", simulacaoId, ex.getStatus(), erroJson);
             persistenceService.falharSimulacao(simulacaoId, erroJson);
         } catch (LanaIndisponivelException ex) {
-            String erroJson = ehTimeout(ex) ? ERRO_TEMPO : ERRO_LANA_INDISPONIVEL;
+            String erroJson = ehTimeoutDeLeitura(ex) ? ERRO_TEMPO : ERRO_LANA_INDISPONIVEL;
             log.error("Simulação #{} falhou na chamada à Lana: {}", simulacaoId, ex.getMessage());
             persistenceService.falharSimulacao(simulacaoId, erroJson);
         } catch (Exception ex) {
@@ -88,10 +66,36 @@ public class SimulacaoJobService {
         }
     }
 
-    private String extrairResultadoJson(JsonNode resposta) {
-        if (resposta == null || resposta.isNull() || resposta.isMissingNode()) {
-            return "{}";
+    private void concluir(Long simulacaoId, JsonNode resposta, long inicioMs) {
+        Long duracaoMs = extrairLong(resposta, "duracao_ms", "duracao");
+        if (duracaoMs == null) {
+            duracaoMs = Math.max(0L, System.currentTimeMillis() - inicioMs);
         }
+        persistenceService.concluirSimulacao(
+                simulacaoId,
+                extrairResultadoJson(resposta),
+                extrairJsonOuNull(resposta, "trilha"),
+                extrairCodigo(resposta),
+                extrairModelo(resposta),
+                extrairTentativas(resposta),
+                duracaoMs
+        );
+        log.info("Simulação #{} concluída com sucesso em {} ms", simulacaoId, duracaoMs);
+    }
+
+    /**
+     * Um 200 sem objeto JSON não é resultado: gravar CONCLUIDA com {} faria o submeter (5.7) usar
+     * uma simulação vazia como a última concluída. Ex.: exigirObjeto(null) lança IllegalStateException.
+     */
+    private static JsonNode exigirObjeto(JsonNode resposta) {
+        if (resposta != null && resposta.isObject()) {
+            return resposta;
+        }
+        throw new IllegalStateException(
+                "Lana respondeu 200 em /simulacao sem o objeto do resultado (2.3); recebido: " + resposta);
+    }
+
+    private String extrairResultadoJson(JsonNode resposta) {
         JsonNode noResultado = resposta.path("resultado");
         if (noResultado.isObject() && noResultado.has("totais")) {
             return objectMapper.writeValueAsString(noResultado);
@@ -100,9 +104,6 @@ public class SimulacaoJobService {
     }
 
     private String extrairJsonOuNull(JsonNode resposta, String campo) {
-        if (resposta == null) {
-            return null;
-        }
         JsonNode node = resposta.path(campo);
         if (node.isMissingNode() || node.isNull()) {
             return null;
@@ -111,9 +112,6 @@ public class SimulacaoJobService {
     }
 
     private static String extrairCodigo(JsonNode resposta) {
-        if (resposta == null) {
-            return null;
-        }
         JsonNode codigo = resposta.path("codigo");
         if (codigo.isString()) {
             return codigo.asString();
@@ -126,9 +124,6 @@ public class SimulacaoJobService {
     }
 
     private static String extrairModelo(JsonNode resposta) {
-        if (resposta == null) {
-            return null;
-        }
         JsonNode modeloTrilha = resposta.path("trilha").path("modelo");
         if (modeloTrilha.isString()) {
             return modeloTrilha.asString();
@@ -141,9 +136,6 @@ public class SimulacaoJobService {
     }
 
     private static Integer extrairTentativas(JsonNode resposta) {
-        if (resposta == null) {
-            return null;
-        }
         JsonNode tentativasTrilha = resposta.path("trilha").path("tentativas");
         if (tentativasTrilha.isNumber()) {
             return tentativasTrilha.intValue();
@@ -156,9 +148,6 @@ public class SimulacaoJobService {
     }
 
     private static Long extrairLong(JsonNode resposta, String... campos) {
-        if (resposta == null) {
-            return null;
-        }
         for (String campo : campos) {
             JsonNode node = resposta.path(campo);
             if (!node.isMissingNode() && !node.isNull() && node.isNumber()) {
@@ -168,17 +157,17 @@ public class SimulacaoJobService {
         return null;
     }
 
-    private static boolean ehTimeout(Throwable erro) {
-        Throwable atual = erro;
-        while (atual != null) {
+    /**
+     * Só o read timeout é "tempo": a Lana recebeu o pedido e não respondeu dentro do
+     * spring.http.clients.read-timeout. Com factory=simple (HttpURLConnection) a mensagem é
+     * "Read timed out"; "Connect timed out" é Lana fora do alcance e fica lana_indisponivel.
+     */
+    private static boolean ehTimeoutDeLeitura(Throwable erro) {
+        for (Throwable atual = erro; atual != null; atual = atual.getCause()) {
             String msg = atual.getMessage();
-            if (msg != null) {
-                String lower = msg.toLowerCase(Locale.ROOT);
-                if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("tempo limite")) {
-                    return true;
-                }
+            if (msg != null && msg.toLowerCase(Locale.ROOT).contains("read timed out")) {
+                return true;
             }
-            atual = atual.getCause();
         }
         return false;
     }
