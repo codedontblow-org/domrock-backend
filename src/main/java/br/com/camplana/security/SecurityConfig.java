@@ -50,6 +50,13 @@ public class SecurityConfig {
                     // GERENTE e SUPERVISOR -> CRIA CAMPANHA
                     req.requestMatchers("/api/campanhas/**").hasAnyRole("GERENTE", "SUPERVISOR");
 
+                    // SUPERVISOR -> DECIDE CORRECAO E ACESSA FILA
+                    req.requestMatchers(HttpMethod.POST, "/api/correcoes/*/decidir").hasRole("SUPERVISOR");
+                    req.requestMatchers("/api/correcoes/fila").hasRole("SUPERVISOR");
+
+                    // GERENTE e SUPERVISOR -> SOLICITA / LISTA CORRECAO
+                    req.requestMatchers("/api/correcoes/**").hasAnyRole("GERENTE", "SUPERVISOR");
+
                     //ADMIN -> CONTROLE SOBRE USUARIOS
                     req.requestMatchers("/api/usuarios/**").hasRole("ADMIN");
 
