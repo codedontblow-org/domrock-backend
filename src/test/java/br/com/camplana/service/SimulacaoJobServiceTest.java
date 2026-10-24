@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -153,8 +154,8 @@ class SimulacaoJobServiceTest {
         simulacao.setStatus(StatusSimulacao.PENDENTE);
         simulacao.setEtapa(EtapaSimulacao.NA_FILA);
         given(repo.findById(45L)).willReturn(Optional.of(simulacao));
-        given(lanaSimulacaoClient.simular(any())).willThrow(
-                new LanaIndisponivelException("Timeout de 180s excedido"));
+        given(lanaSimulacaoClient.simular(any())).willThrow(new LanaIndisponivelException(
+                "Lana indisponível em /simulacao: I/O error on POST request for \"http://lana:8000/simulacao\": Read timed out"));
 
         serviceComPersistenceReal.processarSimulacaoAsync(45L, Map.of("chat_id", "c1", "regra", Map.of()));
 
@@ -162,5 +163,25 @@ class SimulacaoJobServiceTest {
         assertThat(simulacao.getEtapa()).isEqualTo(EtapaSimulacao.ERRO);
         assertThat(simulacao.getErro()).isEqualTo("{\"etapa\":\"tempo\",\"mensagem\":\"Tempo limite excedido na simulação.\"}");
         assertThat(simulacao.getConcluidaEm()).isEqualTo(agora);
+    }
+
+    @Test
+    void processarSimulacaoComConnectTimeoutGravaLanaIndisponivelEnaoTempo() {
+        given(lanaSimulacaoClient.simular(any())).willThrow(new LanaIndisponivelException(
+                "Lana indisponível em /simulacao: I/O error on POST request for \"http://lana:8000/simulacao\": Connect timed out"));
+
+        jobService.processarSimulacaoAsync(46L, Map.of("chat_id", "c1", "regra", Map.of()));
+
+        verify(persistenceService).falharSimulacao(46L, SimulacaoJobService.ERRO_LANA_INDISPONIVEL);
+    }
+
+    @Test
+    void processarSimulacaoComRespostaVaziaDaLanaGravaErroEnaoConcluida() {
+        given(lanaSimulacaoClient.simular(any())).willReturn(null);
+
+        jobService.processarSimulacaoAsync(47L, Map.of("chat_id", "c1", "regra", Map.of()));
+
+        verify(persistenceService).falharSimulacao(47L, SimulacaoJobService.ERRO_INTERNO);
+        verify(persistenceService, never()).concluirSimulacao(any(), any(), any(), any(), any(), any(), any());
     }
 }

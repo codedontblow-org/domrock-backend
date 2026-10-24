@@ -12,6 +12,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import tools.jackson.databind.JsonNode;
 
 import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,5 +70,16 @@ class LanaSimulacaoClientTests {
         assertThatThrownBy(() -> lanaSimulacaoClient.simular(Map.of("regra", Map.of())))
                 .isInstanceOf(LanaIndisponivelException.class)
                 .hasMessageContaining("/simulacao");
+    }
+
+    /** O job da A6-66 reconhece o timeout por este texto; se a mensagem mudar, o ERRO "tempo" some. */
+    @Test
+    void simularComReadTimeoutLevaOReadTimedOutNaMensagem() {
+        servidorLana.expect(requestTo("http://lana.test/simulacao"))
+                .andRespond(withException(new SocketTimeoutException("Read timed out")));
+
+        assertThatThrownBy(() -> lanaSimulacaoClient.simular(Map.of("regra", Map.of())))
+                .isInstanceOf(LanaIndisponivelException.class)
+                .hasMessageContaining("Read timed out");
     }
 }
