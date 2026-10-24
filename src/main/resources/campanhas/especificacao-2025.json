@@ -1,0 +1,172 @@
+[
+  {
+    "id": "especificacao-2025-08-2h",
+    "nome": "ago/25 item 2h",
+    "tipo": "SUBSTITUICAO",
+    "status": "APROVADA",
+    "data_inicio": "2025-08-01",
+    "data_fim": "2025-08-31",
+    "marcas_alvo": [
+      "10"
+    ],
+    "cargos_alvo": [
+      "300"
+    ],
+    "percentual": 1.75,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — ago/25 item 2h"
+  },
+  {
+    "id": "especificacao-2025-09-3g",
+    "nome": "set/25 item 3g",
+    "tipo": "SUBSTITUICAO",
+    "status": "APROVADA",
+    "data_inicio": "2025-09-01",
+    "data_fim": "2025-09-30",
+    "marcas_alvo": [
+      "10"
+    ],
+    "cargos_alvo": [
+      "100",
+      "150",
+      "200",
+      "300"
+    ],
+    "percentual": null,
+    "marca_referencia": "20",
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — set/25 item 3g"
+  },
+  {
+    "id": "especificacao-2025-10-4g",
+    "nome": "out/25 item 4g",
+    "tipo": "ACRESCIMO",
+    "status": "APROVADA",
+    "data_inicio": "2025-10-01",
+    "data_fim": "2025-10-31",
+    "marcas_alvo": [
+      "30"
+    ],
+    "cargos_alvo": [
+      "100",
+      "200",
+      "300"
+    ],
+    "percentual": 0.5,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — out/25 item 4g"
+  },
+  {
+    "id": "especificacao-2025-11-5f",
+    "nome": "nov/25 item 5f",
+    "tipo": "ACRESCIMO",
+    "status": "APROVADA",
+    "data_inicio": "2025-11-24",
+    "data_fim": "2025-11-30",
+    "marcas_alvo": [
+      "10",
+      "20",
+      "30",
+      "40",
+      "50",
+      "60"
+    ],
+    "cargos_alvo": [
+      "100",
+      "200",
+      "300"
+    ],
+    "percentual": 1,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — nov/25 item 5f"
+  },
+  {
+    "id": "especificacao-2025-11-5g",
+    "nome": "nov/25 item 5g",
+    "tipo": "ACRESCIMO",
+    "status": "APROVADA",
+    "data_inicio": "2025-11-24",
+    "data_fim": "2025-11-30",
+    "marcas_alvo": [
+      "10",
+      "20",
+      "30",
+      "40",
+      "50",
+      "60"
+    ],
+    "cargos_alvo": [
+      "150"
+    ],
+    "percentual": 0.5,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — nov/25 item 5g"
+  },
+  {
+    "id": "especificacao-2025-12-6f",
+    "nome": "dez/25 item 6f",
+    "tipo": "ACRESCIMO",
+    "status": "APROVADA",
+    "data_inicio": "2025-12-01",
+    "data_fim": "2025-12-31",
+    "marcas_alvo": [
+      "40",
+      "50",
+      "60"
+    ],
+    "cargos_alvo": [
+      "100",
+      "200",
+      "300"
+    ],
+    "percentual": 1,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — dez/25 item 6f"
+  },
+  {
+    "id": "especificacao-2025-12-6g",
+    "nome": "dez/25 item 6g",
+    "tipo": "ACRESCIMO",
+    "status": "APROVADA",
+    "data_inicio": "2025-12-01",
+    "data_fim": "2025-12-31",
+    "marcas_alvo": [
+      "30"
+    ],
+    "cargos_alvo": [
+      "100",
+      "200",
+      "300"
+    ],
+    "percentual": 0.5,
+    "marca_referencia": null,
+    "origem": "ESPECIFICACAO",
+    "autor": null,
+    "aprovador": null,
+    "aprovada_em": null,
+    "justificativa": "Especificacao.pdf — dez/25 item 6g"
+  }
+]

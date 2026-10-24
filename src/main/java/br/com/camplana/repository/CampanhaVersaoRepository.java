@@ -8,9 +8,23 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDate;
 
 @Repository
 public interface CampanhaVersaoRepository extends JpaRepository<CampanhaVersao, Long> {
+
+    /** Contexto A6-74: última versão, período inclusivo e exclusão da própria conversa. */
+    @Query("""
+            SELECT v FROM CampanhaVersao v JOIN FETCH v.campanha c JOIN FETCH c.autor
+            WHERE c.status IN :status AND c.chatId <> :chatId
+              AND v.dataInicio <= :fim AND v.dataFim >= :inicio
+              AND v.numero = (SELECT MAX(v2.numero) FROM CampanhaVersao v2 WHERE v2.campanha = c)
+            ORDER BY v.id
+            """)
+    List<CampanhaVersao> findContextoSobreposto(@Param("inicio") LocalDate inicio,
+                                               @Param("fim") LocalDate fim,
+                                               @Param("chatId") String chatId,
+                                               @Param("status") List<StatusCampanha> status);
 
     List<CampanhaVersao> findByCampanhaIdOrderByNumeroAsc(Long campanhaId);
 

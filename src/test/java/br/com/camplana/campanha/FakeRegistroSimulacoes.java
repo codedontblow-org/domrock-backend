@@ -22,7 +22,9 @@ public class FakeRegistroSimulacoes implements RegistroSimulacoes {
     public static final String REGRA_BLACK_FRIDAY = """
             {"rule_id": "draft-3fa9c1d2", "tipo_regra": "BONUS_TEMPORARIO", "parametros": [
               {"key": "periodo", "value": {"data_inicio": "2025-11-24", "data_fim": "2025-11-30"}},
-              {"key": "pct_acrescimo", "value": 1.0}
+              {"key": "pct_acrescimo", "value": 1.0},
+              {"key": "marcas_alvo", "value": ["10", "30"]},
+              {"key": "cargos_alvo", "value": ["100", "200", "300"]}
             ]}""";
     public static final String RESULTADO_BLACK_FRIDAY = """
             {"totais": {"baseline": 480263.24, "simulado": 503999.34, "diferenca": 23736.10},
@@ -52,10 +54,14 @@ public class FakeRegistroSimulacoes implements RegistroSimulacoes {
 
     /** Simulação concluída da Black Friday; ids maiores terminam depois. */
     public void concluida(long id, int usuarioId, String chatId) {
+        concluida(id, usuarioId, chatId, RESULTADO_BLACK_FRIDAY);
+    }
+
+    public void concluida(long id, int usuarioId, String chatId, String resultado) {
         Instant concluidaEm = PRIMEIRA_CONCLUSAO.plusSeconds(id);
         simulacoes.put(id, new SimulacaoGravada(id, usuarioId, chatId, "CONCLUIDA",
-                REGRA_BLACK_FRIDAY, RESULTADO_BLACK_FRIDAY, concluidaEm));
-        inserirNoBanco(id, usuarioId, chatId, "CONCLUIDA", RESULTADO_BLACK_FRIDAY, concluidaEm);
+                REGRA_BLACK_FRIDAY, resultado, concluidaEm));
+        inserirNoBanco(id, usuarioId, chatId, "CONCLUIDA", resultado, concluidaEm);
     }
 
     public void rodando(long id, int usuarioId, String chatId) {

@@ -1,6 +1,7 @@
 package br.com.camplana.service;
 
 import br.com.camplana.client.LanaSimulacaoClient;
+import br.com.camplana.campanha.ContextoCampanhasService;
 import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusSimulacao;
@@ -41,11 +42,15 @@ class SimulacaoJobServiceTest {
     @Mock
     private LanaSimulacaoClient lanaSimulacaoClient;
 
+    @Mock
+    private ContextoCampanhasService contextoCampanhas;
+
     private SimulacaoJobService jobService;
 
     @BeforeEach
     void setUp() {
-        jobService = new SimulacaoJobService(persistenceService, lanaSimulacaoClient, JSON);
+        org.mockito.Mockito.lenient().when(contextoCampanhas.enriquecer(any())).thenAnswer(i -> JSON.valueToTree(i.getArgument(0)));
+        jobService = new SimulacaoJobService(persistenceService, lanaSimulacaoClient, JSON, contextoCampanhas);
     }
 
     @Test
@@ -53,7 +58,8 @@ class SimulacaoJobServiceTest {
         JsonNode respostaLana = JSON.readTree("""
                 {
                   "totais": {"baseline": 480263.24, "simulado": 503999.34, "diferenca": 23736.10},
-                  "conflitos": [],
+                  "comissoes_periodo": [{"marca":"10","cargo":"150","base":1,"vigente":3,"comCampanha":3.5}],
+                  "conflitos": [{"id":"C","tipo":"ACRESCIMO","status":"AGUARDANDO_APROVACAO"}],
                   "codigo": "resultado = calcular(vendas)",
                   "trilha": {
                     "modelo": "gemini-3.5-flash-lite",
@@ -82,6 +88,31 @@ class SimulacaoJobServiceTest {
                 eq(1),
                 eq(1420L)
         );
+    }
+
+    @Test
+    void enviaOLoteEnriquecidoPeloBackend() {
+        var recebido = Map.of("chat_id", "c1", "regra", Map.of());
+        var enriquecido = (tools.jackson.databind.node.ObjectNode) JSON.readTree(
+                "{\"chat_id\":\"c1\",\"regra\":{},\"campanhas\":[{\"id\":\"A\"}]}");
+        given(contextoCampanhas.enriquecer(recebido)).willReturn(enriquecido);
+        given(lanaSimulacaoClient.simular(enriquecido)).willReturn(JSON.readTree("{}"));
+
+        jobService.processarSimulacaoAsync(46L, recebido);
+
+        verify(lanaSimulacaoClient).simular(enriquecido);
+    }
+
+    @Test
+    void contextoInvalidoFalhaSemChamarALana() {
+        org.mockito.Mockito.doThrow(new br.com.camplana.exception.BadRequestException("Período inválido"))
+                .when(contextoCampanhas).enriquecer(any());
+
+        jobService.processarSimulacaoAsync(47L, Map.of("chat_id", "c1"));
+
+        org.mockito.Mockito.verifyNoInteractions(lanaSimulacaoClient);
+        verify(persistenceService).falharSimulacao(eq(47L), org.mockito.ArgumentMatchers.argThat(erro ->
+                JSON.readTree(erro).path("etapa").asString().equals("validacao")));
     }
 
     @Test
@@ -115,7 +146,7 @@ class SimulacaoJobServiceTest {
         SimulacaoPersistenceService realPersistence = new SimulacaoPersistenceService(
                 repo, Clock.fixed(agora, ZoneOffset.UTC));
         SimulacaoJobService serviceComPersistenceReal = new SimulacaoJobService(
-                realPersistence, lanaSimulacaoClient, JSON);
+                realPersistence, lanaSimulacaoClient, JSON, contextoCampanhas);
 
         Simulacao simulacao = new Simulacao();
         simulacao.setId(45L);

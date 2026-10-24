@@ -1,6 +1,8 @@
 package br.com.camplana.service;
 
 import br.com.camplana.client.LanaSimulacaoClient;
+import br.com.camplana.campanha.ContextoCampanhasService;
+import br.com.camplana.exception.BadRequestException;
 import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.exception.LanaIndisponivelException;
 import br.com.camplana.exception.LanaRespostaException;
@@ -34,13 +36,15 @@ public class SimulacaoJobService {
     private final SimulacaoPersistenceService persistenceService;
     private final LanaSimulacaoClient lanaSimulacaoClient;
     private final ObjectMapper objectMapper;
+    private final ContextoCampanhasService contextoCampanhas;
 
     public SimulacaoJobService(SimulacaoPersistenceService persistenceService,
                                LanaSimulacaoClient lanaSimulacaoClient,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper, ContextoCampanhasService contextoCampanhas) {
         this.persistenceService = persistenceService;
         this.lanaSimulacaoClient = lanaSimulacaoClient;
         this.objectMapper = objectMapper;
+        this.contextoCampanhas = contextoCampanhas;
     }
 
     @Async
@@ -51,7 +55,7 @@ public class SimulacaoJobService {
         try {
             persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.SIMULANDO);
 
-            JsonNode resposta = lanaSimulacaoClient.simular(payloadLana);
+            JsonNode resposta = lanaSimulacaoClient.simular(contextoCampanhas.enriquecer(payloadLana));
 
             String resultadoJson = extrairResultadoJson(resposta);
             String trilhaJson = extrairJsonOuNull(resposta, "trilha");
@@ -74,6 +78,9 @@ public class SimulacaoJobService {
             );
             log.info("Simulação #{} concluída com sucesso em {} ms", simulacaoId, duracaoMs);
 
+        } catch (BadRequestException ex) {
+            persistenceService.falharSimulacao(simulacaoId, objectMapper.writeValueAsString(
+                    Map.of("etapa", "validacao", "mensagem", ex.getMessage())));
         } catch (LanaRespostaException ex) {
             String erroJson = normalizarErroDaLana(ex.getCorpo());
             log.warn("Simulação #{} falhou na Lana (HTTP {}): {}", simulacaoId, ex.getStatus(), erroJson);
