@@ -280,6 +280,26 @@ class LanaControllersTests {
     }
 
     @Test
+    void gerenteNaoConsultaSimulacaoDeOutroUsuarioMesmoComVersaoSubmetida() throws Exception {
+        Campanha campanha = new Campanha();
+        campanha.setId(12L);
+        campanha.setAutor(sergio);
+
+        Simulacao simulacao = new Simulacao();
+        simulacao.setId(345L);
+        simulacao.setUsuario(sergio);
+        simulacao.setChatId("chat-sergio");
+        simulacao.setCampanha(campanha);
+        simulacao.setStatus(StatusSimulacao.CONCLUIDA);
+
+        given(simulacaoRepository.findById(345L)).willReturn(Optional.of(simulacao));
+        given(campanhaVersaoRepository.existsByCampanhaId(12L)).willReturn(true);
+
+        mockMvc.perform(get("/api/simulacoes/345").header("Authorization", autorizacaoGabriela))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void buscarSimulacaoInexistenteRetorna404() throws Exception {
         given(simulacaoRepository.findById(404L)).willReturn(Optional.empty());
 
