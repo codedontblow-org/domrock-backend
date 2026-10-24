@@ -23,10 +23,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
@@ -305,10 +307,11 @@ class CampanhaApiTest {
     void submissaoCongelaPercentuaisHistoricoEConflitosParaOSupervisor() throws Exception {
         String resultado = """
                 {"totais":{"diferenca":15},
-                 "comissoes_periodo":[{"marca":"10","cargo":"150","base":1,"vigente":3,
-                  "comCampanha":3.5,"historico":[{"id":"A","tipo":"ACRESCIMO","aprovador":"Sérgio"}]}],
-                 "conflitos":[{"id":"C","tipo":"ACRESCIMO","status":"AGUARDANDO_APROVACAO"}],
-                 "trilha":{"campanhas":[{"id":"A"}]}}
+                 "comissao_periodo":[{"marca":"10","cargo":"150","pct_base":1,"pct_vigente":3,
+                  "pct_com_campanha":3.5,"historico":[{"campanha_id":9,"versao":1,"tipo":"ACRESCIMO",
+                  "aprovador":"Sérgio"}]}],
+                 "conflitos":[{"campanha_id":11,"versao":1,"tipo":"ACRESCIMO","status":"AGUARDANDO_APROVACAO"}],
+                 "trilha":{"campanhas":[{"campanha_id":9,"versao":1}]}}
                 """;
         simulacoes.concluida(345, gabriela.getId(), "chat-vigencia", resultado);
         String resposta = enviar(post("/api/campanhas"), gabriela, salvar("Vigência", "chat-vigencia", 345))
@@ -319,10 +322,10 @@ class CampanhaApiTest {
 
         enviar(get("/api/campanhas/" + id + "/versoes/1"), sergio)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.resultado.comissoes_periodo[0].vigente").value(3))
-                .andExpect(jsonPath("$.resultado.comissoes_periodo[0].historico[0].aprovador").value("Sérgio"))
-                .andExpect(jsonPath("$.resultado.conflitos[0].id").value("C"))
-                .andExpect(jsonPath("$.resultado.trilha.campanhas[0].id").value("A"));
+                .andExpect(jsonPath("$.resultado.comissao_periodo[0].pct_vigente").value(3))
+                .andExpect(jsonPath("$.resultado.comissao_periodo[0].historico[0].aprovador").value("Sérgio"))
+                .andExpect(jsonPath("$.resultado.conflitos[0].campanha_id").value(11))
+                .andExpect(jsonPath("$.resultado.trilha.campanhas[0].campanha_id").value(9));
         enviar(get("/api/campanhas/fila"), sergio)
                 .andExpect(jsonPath("$[0].conflitos").value(1));
     }
@@ -335,17 +338,17 @@ class CampanhaApiTest {
         long reprovada = submeterBlackFriday(gabriela);
         decidir(reprovada, StatusCampanha.REPROVADA, sergio, REPROVACAO);
         salvarBlackFriday(gabriela);
-        var json = new tools.jackson.databind.ObjectMapper();
+        var json = new ObjectMapper();
         var pedido = json.createObjectNode();
         pedido.put("chat_id", "nova-conversa");
         pedido.set("regra", json.readTree(FakeRegistroSimulacoes.REGRA_BLACK_FRIDAY));
 
         var fontes = contextoCampanhas.enriquecer(pedido).path("campanhas");
-        org.assertj.core.api.Assertions.assertThat(fontes.size()).isEqualTo(3); // aprov., pend. e especificação 5f
-        org.assertj.core.api.Assertions.assertThat(fontes.get(0).path("aprovador").asString()).isEqualTo("Sérgio");
+        assertThat(fontes).extracting(f -> f.path("campanha_id").asLong()).containsExactly(aprovada, pendente);
+        assertThat(fontes.get(0).path("aprovador").asString()).isEqualTo("Sérgio");
         pedido.put("chat_id", chatDa(pendente));
         var semPropria = contextoCampanhas.enriquecer(pedido).path("campanhas");
-        org.assertj.core.api.Assertions.assertThat(semPropria.size()).isEqualTo(2);
+        assertThat(semPropria).extracting(f -> f.path("campanha_id").asLong()).containsExactly(aprovada);
     }
 
     // ---------- Apoio ----------

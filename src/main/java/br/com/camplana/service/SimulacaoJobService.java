@@ -2,7 +2,6 @@ package br.com.camplana.service;
 
 import br.com.camplana.client.LanaSimulacaoClient;
 import br.com.camplana.campanha.ContextoCampanhasService;
-import br.com.camplana.exception.BadRequestException;
 import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.exception.LanaIndisponivelException;
 import br.com.camplana.exception.LanaRespostaException;
@@ -56,9 +55,6 @@ public class SimulacaoJobService {
             persistenceService.atualizarEtapa(simulacaoId, EtapaSimulacao.SIMULANDO);
             JsonNode resposta = exigirObjeto(lanaSimulacaoClient.simular(contextoCampanhas.enriquecer(payloadLana)));
             concluir(simulacaoId, resposta, inicioMs);
-        } catch (BadRequestException ex) {
-            persistenceService.falharSimulacao(simulacaoId, objectMapper.writeValueAsString(
-                    Map.of("etapa", "validacao", "mensagem", ex.getMessage())));
         } catch (LanaRespostaException ex) {
             String erroJson = normalizarErroDaLana(ex.getCorpo());
             log.warn("Simulação #{} falhou na Lana (HTTP {}): {}", simulacaoId, ex.getStatus(), erroJson);

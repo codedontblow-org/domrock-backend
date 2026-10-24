@@ -1,12 +1,12 @@
 package br.com.camplana.campanha;
 
+import br.com.camplana.dto.campanha.PeriodoCampanha;
+import br.com.camplana.entity.Campanha;
 import br.com.camplana.entity.CampanhaStatusLog;
 import br.com.camplana.entity.CampanhaVersao;
 import br.com.camplana.entity.StatusCampanha;
-import br.com.camplana.exception.BadRequestException;
 import br.com.camplana.repository.CampanhaStatusLogRepository;
 import br.com.camplana.repository.CampanhaVersaoRepository;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
@@ -14,140 +14,107 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.io.IOException;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
 
-/** Contexto confiável para a Lana: seleciona fontes; nenhum cálculo de comissão é feito aqui. */
+/**
+ * Monta {@code campanhas} do POST /simulacao da Lana (contrato 4.3): as versões aprovadas e as que aguardam
+ * aprovação que cruzam o período e ao menos uma marca × cargo da ficha, sem a da própria conversa.
+ * Nenhum cálculo de comissão aqui (A6-74); as campanhas da especificação a Lana carrega sozinha.
+ *
+ * <pre>contexto.enriquecer(Map.of("chat_id", "c1", "regra", ficha)).path("campanhas"); // [] sem sobreposição</pre>
+ */
 @Service
 public class ContextoCampanhasService {
-    private static final List<StatusCampanha> STATUS = List.of(
-            StatusCampanha.APROVADA, StatusCampanha.AGUARDANDO_APROVACAO);
-    private static final Set<String> MARCAS = Set.of("10", "20", "30", "40", "50", "60");
+
+    private static final List<StatusCampanha> APROVADA_OU_PENDENTE =
+            List.of(StatusCampanha.APROVADA, StatusCampanha.AGUARDANDO_APROVACAO);
+
     private final CampanhaVersaoRepository versoes;
     private final CampanhaStatusLogRepository logs;
+    private final CamposDaSimulacao campos;
     private final ObjectMapper json;
-    private final JsonNode especificacao;
 
     public ContextoCampanhasService(CampanhaVersaoRepository versoes, CampanhaStatusLogRepository logs,
-                                    ObjectMapper json) throws IOException {
+                                    CamposDaSimulacao campos, ObjectMapper json) {
         this.versoes = versoes;
         this.logs = logs;
+        this.campos = campos;
         this.json = json;
-        try (var entrada = new ClassPathResource("campanhas/especificacao-2025.json").getInputStream()) {
-            this.especificacao = json.readTree(entrada);
-        }
     }
 
+    /** Cópia do pedido com {@code campanhas} montado aqui: o que o navegador mandou nesse campo é descartado. */
     @Transactional(readOnly = true)
     public ObjectNode enriquecer(Object payload) {
         JsonNode recebido = json.valueToTree(payload);
         if (!recebido.isObject()) {
-            throw new BadRequestException("Corpo da simulação inválido");
+            throw new IllegalArgumentException("Esperado objeto com chat_id e regra no pedido à Lana; recebido " + recebido);
         }
         ObjectNode pedido = (ObjectNode) recebido.deepCopy();
-        JsonNode regra = pedido.path("regra");
-        var periodo = periodo(regra);
-        Set<String> marcas = codigos(parametro(regra, "marcas_alvo"), true);
-        Set<String> cargos = codigos(parametro(regra, "cargos_alvo"), false);
-        ArrayNode campanhas = json.createArrayNode();
-        String chatId = pedido.path("chat_id").asString();
-        for (CampanhaVersao versao : versoes.findContextoSobreposto(periodo.get(0), periodo.get(1), chatId, STATUS)) {
-            JsonNode ficha = json.readTree(versao.getRegra());
-            Set<String> marcasFonte = codigos(parametro(ficha, "marcas_alvo"), true);
-            Set<String> cargosFonte = codigos(parametro(ficha, "cargos_alvo"), false);
-            if (intersecta(marcas, marcasFonte) && intersecta(cargos, cargosFonte)) {
-                campanhas.add(daVersao(versao, ficha, marcasFonte, cargosFonte));
-            }
-        }
-        for (JsonNode fonte : especificacao) {
-            LocalDate inicio = LocalDate.parse(fonte.path("data_inicio").asString());
-            LocalDate fim = LocalDate.parse(fonte.path("data_fim").asString());
-            if (!inicio.isAfter(periodo.get(1)) && !fim.isBefore(periodo.get(0))
-                    && intersecta(marcas, codigos(fonte.path("marcas_alvo"), true))
-                    && intersecta(cargos, codigos(fonte.path("cargos_alvo"), false))) {
-                campanhas.add(fonte.deepCopy());
-            }
-        }
-        // Nunca aceita campanhas/decisões fornecidas pelo navegador.
-        pedido.set("campanhas", campanhas);
+        pedido.set("campanhas", sobrepostas(pedido.path("chat_id").asString(), pedido.path("regra")));
         return pedido;
     }
 
-    private ObjectNode daVersao(CampanhaVersao versao, JsonNode ficha, Set<String> marcas, Set<String> cargos) {
-        var campanha = versao.getCampanha();
-        JsonNode percentual = parametro(ficha, "pct_acrescimo");
-        if (!(percentual.isNumber() || percentual.isString())) {
-            throw new BadRequestException("Campanha " + campanha.getId() + " sem pct_acrescimo numérico");
+    private ArrayNode sobrepostas(String chatId, JsonNode regra) {
+        ArrayNode campanhas = json.createArrayNode();
+        // Ficha incompleta segue sem contexto: quem valida e devolve os erros (422) é a Lana.
+        Optional<EscopoCampanha> daFicha = campos.escopo(regra);
+        if (daFicha.isEmpty()) {
+            return campanhas;
         }
-        ObjectNode fonte = json.createObjectNode();
-        fonte.put("id", "campanha-" + campanha.getId() + "-v" + versao.getNumero());
-        fonte.put("nome", campanha.getNome());
-        fonte.put("tipo", "ACRESCIMO");
-        fonte.put("status", campanha.getStatus().name());
-        fonte.put("data_inicio", versao.getDataInicio().toString());
-        fonte.put("data_fim", versao.getDataFim().toString());
-        fonte.set("marcas_alvo", json.valueToTree(marcas.stream().sorted().toList()));
-        fonte.set("cargos_alvo", json.valueToTree(cargos.stream().sorted().toList()));
-        fonte.set("percentual", percentual);
-        fonte.put("autor", campanha.getAutor().getNome());
-        fonte.put("origem", "CAMPANHA");
-        if (campanha.getStatus() == StatusCampanha.APROVADA) {
-            CampanhaStatusLog decisao = logs.findByCampanhaIdOrderByEmAscIdAsc(campanha.getId()).stream()
-                    .filter(l -> l.getVersao() != null && Objects.equals(l.getVersao().getId(), versao.getId()))
-                    .filter(l -> l.getPara() == StatusCampanha.APROVADA)
-                    .findFirst().orElseThrow(() -> new IllegalStateException(
-                            "Campanha aprovada sem decisão da versão " + versao.getId()));
-            fonte.put("aprovador", decisao.getUsuario().getNome());
-            fonte.put("aprovada_em", decisao.getEm().toString());
-            fonte.put("justificativa", decisao.getJustificativa());
-        }
-        return fonte;
-    }
-
-    private List<LocalDate> periodo(JsonNode regra) {
-        JsonNode valor = parametro(regra, "periodo");
-        try {
-            LocalDate inicio = LocalDate.parse(valor.path("data_inicio").asString());
-            LocalDate fim = LocalDate.parse(valor.path("data_fim").asString());
-            if (inicio.isAfter(fim)) throw new IllegalArgumentException();
-            return List.of(inicio, fim);
-        } catch (RuntimeException e) {
-            throw new BadRequestException("Período da campanha inválido: informe data_inicio e data_fim em ordem");
-        }
-    }
-
-    private static JsonNode parametro(JsonNode regra, String chave) {
-        for (JsonNode campo : regra.path("parametros")) {
-            if (chave.equals(campo.path("key").asString())) return campo.path("value");
-        }
-        throw new BadRequestException("Parâmetro obrigatório ausente: " + chave);
-    }
-
-    private static Set<String> codigos(JsonNode valor, boolean marcas) {
-        List<JsonNode> valores = new ArrayList<>();
-        if (valor.isArray()) valor.forEach(valores::add);
-        else valores.add(valor);
-        Set<String> codigos = new LinkedHashSet<>();
-        for (JsonNode item : valores) {
-            if (!(item.isString() || item.isIntegralNumber()) || codigo(item).isBlank()) {
-                throw new BadRequestException("Marcas e cargos devem conter códigos válidos");
+        PeriodoCampanha periodo = daFicha.get().periodo();
+        for (CampanhaVersao versao : versoes.findContextoSobreposto(
+                periodo.dataInicio(), periodo.dataFim(), chatId, APROVADA_OU_PENDENTE)) {
+            JsonNode ficha = json.readTree(versao.getRegra());
+            EscopoCampanha daVersao = escopoSalvo(versao, ficha);
+            if (daFicha.get().temMarcaECargoEmComum(daVersao)) {
+                campanhas.add(item(versao, ficha, daVersao));
             }
-            codigos.add(codigo(item));
         }
-        if (codigos.isEmpty()) throw new BadRequestException("Marcas e cargos são obrigatórios");
-        return marcas && codigos.contains("ALL") ? MARCAS : codigos;
+        return campanhas;
     }
 
-    private static String codigo(JsonNode item) {
-        return item.isString() ? item.asString() : item.bigIntegerValue().toString();
+    private EscopoCampanha escopoSalvo(CampanhaVersao versao, JsonNode ficha) {
+        return campos.escopo(ficha).orElseThrow(() -> new IllegalStateException(
+                "Versão " + versao.getId() + " salva sem período, marcas ou cargos na ficha; recebido " + ficha));
     }
 
-    private static boolean intersecta(Set<String> a, Set<String> b) {
-        return a.stream().anyMatch(b::contains);
+    /** O item do contrato 4.3. Nesta sprint a ficha do chat só cria acréscimo. */
+    private ObjectNode item(CampanhaVersao versao, JsonNode ficha, EscopoCampanha escopo) {
+        Campanha campanha = versao.getCampanha();
+        ObjectNode item = json.createObjectNode();
+        item.put("campanha_id", campanha.getId());
+        item.put("versao", versao.getNumero());
+        item.put("tipo", "ACRESCIMO");
+        item.put("nome", campanha.getNome());
+        item.put("status", campanha.getStatus().name());
+        item.put("autor", campanha.getAutor().getNome());
+        preencherDecisao(item, aprovacao(versao));
+        item.put("data_inicio", versao.getDataInicio().toString());
+        item.put("data_fim", versao.getDataFim().toString());
+        item.set("pct_acrescimo", campos.pctAcrescimo(ficha));
+        item.set("marcas_alvo", json.valueToTree(escopo.marcas()));
+        item.set("cargos_alvo", json.valueToTree(escopo.cargos()));
+        return item;
+    }
+
+    private static void preencherDecisao(ObjectNode item, Optional<CampanhaStatusLog> decisao) {
+        item.put("aprovador", decisao.map(log -> log.getUsuario().getNome()).orElse(null));
+        item.put("aprovada_em", decisao.map(log -> log.getEm().toString()).orElse(null));
+        item.put("justificativa", decisao.map(CampanhaStatusLog::getJustificativa).orElse(null));
+    }
+
+    /** Aprovador, data e justificativa vêm do log da mesma versão; aprovada sem esse registro para a simulação. */
+    private Optional<CampanhaStatusLog> aprovacao(CampanhaVersao versao) {
+        Campanha campanha = versao.getCampanha();
+        if (campanha.getStatus() != StatusCampanha.APROVADA) {
+            return Optional.empty();
+        }
+        return Optional.of(logs.findByCampanhaIdOrderByEmAscIdAsc(campanha.getId()).stream()
+                .filter(log -> log.getVersao() != null && Objects.equals(log.getVersao().getId(), versao.getId()))
+                .filter(log -> log.getPara() == StatusCampanha.APROVADA)
+                .findFirst().orElseThrow(() -> new IllegalStateException(
+                        "Campanha " + campanha.getId() + " aprovada sem decisão da versão " + versao.getId())));
     }
 }

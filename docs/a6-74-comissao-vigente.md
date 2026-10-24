@@ -1,84 +1,44 @@
-# A6-74 — Comissão vigente e conflitos
+# A6-74 — Campanhas sobrepostas no pedido à Lana
 
-O job de simulação consulta `ContextoCampanhasService` antes de chamar `POST /simulacao`
-na Lana. A requisição pública continua recebendo `chat_id` e `regra`; o backend monta
-`campanhas` a partir das fontes confiáveis. Não existe cálculo de percentual ou de
-comissão no Java.
+O formato é o do contrato da sprint (`domrock-camplana/docs/contratos-sprint-2.md`):
+o item de `campanhas` no `POST /simulacao` da Lana está na seção 4.3, e o que a Lana
+devolve (`comissao_periodo`, `conflitos`, `trilha.campanhas`) nas seções 2.3 e 2.2.
+A regra de sobreposição é a do estudo A6-73. Nenhum cálculo de % ou de comissão fica no Java.
 
-## Seleção das fontes
+## O que o backend faz
 
-- Última versão de cada campanha em `APROVADA` ou `AGUARDANDO_APROVACAO`.
-- Datas inclusivas, com interseção de período, marcas e cargos da ficha.
-- A própria conversa é excluída para não contar uma versão anterior como concorrente.
+O job de simulação (`SimulacaoJobService`) passa o pedido por `ContextoCampanhasService`
+antes de chamar a Lana:
+
+- Lê período, marcas e cargos da ficha (`CamposDaSimulacao.escopo`, com `ALL` trocado
+  pelas seis marcas). Se a ficha estiver incompleta, segue com `campanhas: []` e a Lana
+  devolve o 422 com os erros, como antes.
+- Busca a última versão das campanhas `APROVADA` ou `AGUARDANDO_APROVACAO` que cruzam o
+  período, sem a da própria conversa (`CampanhaVersaoRepository.findContextoSobreposto`).
+  Como `APROVADA` não sai mais desse status, a última versão é a aprovada.
+- Fica só com as que têm ao menos uma marca × cargo em comum com a ficha.
 - Autor vem da campanha; aprovador, data e justificativa vêm do log da mesma versão.
-  Uma campanha aprovada sem esse registro interrompe a simulação, em vez de inventar a decisão.
-- `marcas_alvo: ALL` é expandido para os códigos do catálogo existente (10 a 60).
-- Contexto informado pelo cliente é substituído pelo contexto montado no servidor.
+  Campanha aprovada sem esse registro interrompe a simulação, em vez de inventar a decisão.
+- O que o navegador mandar em `campanhas` é descartado.
 
-A branch integrada tem as intercorrências de RH da V6, mas ainda não tem um catálogo
-persistido das campanhas percentuais da especificação. Por isso,
-`src/main/resources/campanhas/especificacao-2025.json` registra os itens 2h, 3g, 4g,
-5f, 5g, 6f e 6g do `Especificacao.pdf`. São fontes identificadas por
-`origem: ESPECIFICACAO`, sem autor, aprovador ou data de aprovação fictícios.
-O item 3g referencia a marca 20; quem resolve sua taxa por cargo é a Lana.
-Prêmios fixos e intercorrências de RH não são campanhas percentuais deste contrato.
-Quando o importador de campanhas existir, deverá substituir esse catálogo mantendo
-os IDs de origem, sem carregar as mesmas fontes duas vezes.
-
-## Contrato backend → Lana
-
-O campo opcional `campanhas` acompanha `regra` e `chat_id`:
-
-```json
-{
-  "campanhas": [{
-    "id": "campanha-12-v1",
-    "nome": "Campanha A",
-    "tipo": "ACRESCIMO",
-    "status": "APROVADA",
-    "data_inicio": "2025-11-20",
-    "data_fim": "2025-11-30",
-    "marcas_alvo": ["10"],
-    "cargos_alvo": ["150"],
-    "percentual": 1.0,
-    "autor": "Gabriela",
-    "aprovador": "Sérgio",
-    "aprovada_em": "2025-10-20T12:00:00Z",
-    "justificativa": "Meta aprovada",
-    "origem": "CAMPANHA"
-  }]
-}
-```
-
-Percentuais são literais: `0.5` significa meio ponto percentual, não 50%.
-`SUBSTITUICAO` usa `percentual` absoluto **ou** `marca_referencia`, nunca ambos.
-A ficha do chat continua criando somente acréscimos nesta sprint.
+As campanhas da especificação (2h, 3g, 4g, 5f, 5g, 6f, 6g) **não** saem do backend:
+a Lana carrega sozinha (contrato 4.3). No A6-77 elas passam a vir de uma tabela,
+lida pela Lana, sem mudança aqui.
 
 ## Resultado e persistência
 
-A Lana acrescenta `comissoes_periodo`, `conflitos` e `trilha.campanhas` ao resultado.
-Cada trecho tem `marca`, `cargo`, `inicio`, `fim`, `base`, `vigente`, `comCampanha`,
-`historico` e `avisos`. O histórico distingue `ACRESCIMO` de `SUBSTITUICAO`, indica
-`aplicada`, percentual resolvido e dados da decisão. `acrescimo` é nulo nas substituições.
-Os conflitos trazem o intervalo de interseção, marca, cargos, tipo e status.
-Pendentes aparecem apenas nos conflitos.
+`SimulacaoPersistenceService` grava o resultado inteiro da Lana e a trilha.
+`CampanhaService.submeter` copia o resultado para a versão imutável, então
+`GET /api/campanhas/{id}/versoes/{numero}` mostra ao supervisor exatamente a % vigente,
+o histórico e os conflitos vistos na submissão. A re-simulação na aprovação é do A6-68.
 
-`SimulacaoPersistenceService` já grava o resultado JSON completo e a trilha.
-`CampanhaService.submeter` já copia o resultado integral para a versão imutável.
-Assim, `GET /api/campanhas/{id}/versoes/{numero}` entrega ao supervisor exatamente
-os percentuais, fontes e conflitos observados na submissão, sem recalcular a versão.
-Não é necessária migration, variável de ambiente nova nem alteração no frontend/IaC.
+## Testes
 
-A re-simulação obrigatória antes da decisão pertence à A6-68; este PR fornece o
-contexto para a simulação, mas não implementa a aprovação. As rotas de aprovação
-não estão presentes na dependência A6-66 integrada nesta branch.
+- `ContextoCampanhasServiceTest`: o item do 4.3 com a decisão, a pendente sem decisão,
+  marca × cargo em comum, `ALL`, a consulta sem a própria conversa, nada da especificação,
+  ficha incompleta sem contexto e aprovada sem decisão.
+- `CamposDaSimulacaoTest`: o escopo da ficha.
+- `CampanhaApiTest` (PostgreSQL com Testcontainers): a consulta real e a versão congelada
+  lida pelo supervisor.
 
-## Validação
-
-- `bash mvnw -Dtest=ContextoCampanhasServiceTest,SimulacaoJobServiceTest test`
-- Com Docker disponível: `bash mvnw -Dtest=CampanhaApiTest test`
-- Suíte completa: `bash mvnw test`
-
-Os testes de contexto verificam seleção, proveniência, pendentes, catálogo,
-substituição de setembro e rejeição de contexto forjado. Os testes de API verificam
-persistência e leitura pelo supervisor com PostgreSQL/Testcontainers.
+`./mvnw test` roda tudo.
