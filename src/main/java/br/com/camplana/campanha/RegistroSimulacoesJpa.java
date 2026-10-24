@@ -6,7 +6,6 @@ import br.com.camplana.repository.SimulacaoRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -14,11 +13,6 @@ import java.util.Optional;
  */
 @Component
 public class RegistroSimulacoesJpa implements RegistroSimulacoes {
-
-    private static final List<StatusSimulacao> STATUS_EM_ANDAMENTO = List.of(
-            StatusSimulacao.PENDENTE,
-            StatusSimulacao.RODANDO
-    );
 
     private final SimulacaoRepository simulacaoRepository;
 
@@ -45,7 +39,7 @@ public class RegistroSimulacoesJpa implements RegistroSimulacoes {
     @Transactional(readOnly = true)
     public Optional<Long> emAndamento(long campanhaId) {
         return simulacaoRepository
-                .findFirstByCampanhaIdAndStatusInOrderByIdDesc(campanhaId, STATUS_EM_ANDAMENTO)
+                .findFirstByCampanhaIdAndStatusInOrderByIdDesc(campanhaId, StatusSimulacao.EM_ANDAMENTO)
                 .map(Simulacao::getId);
     }
 

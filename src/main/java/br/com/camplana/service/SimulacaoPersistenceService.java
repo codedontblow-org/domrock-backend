@@ -24,11 +24,6 @@ public class SimulacaoPersistenceService {
     public static final String MOTIVO_INTERROMPIDA =
             "{\"etapa\":\"interrompida\",\"mensagem\":\"Simulação interrompida por reinício do servidor.\"}";
 
-    private static final List<StatusSimulacao> STATUS_EM_ANDAMENTO = List.of(
-            StatusSimulacao.PENDENTE,
-            StatusSimulacao.RODANDO
-    );
-
     private final SimulacaoRepository simulacaoRepository;
     private final Clock relogio;
 
@@ -84,7 +79,7 @@ public class SimulacaoPersistenceService {
 
     @Transactional
     public int encerrarSimulacoesInterrompidas() {
-        List<Simulacao> interrompidas = simulacaoRepository.findByStatusIn(STATUS_EM_ANDAMENTO);
+        List<Simulacao> interrompidas = simulacaoRepository.findByStatusIn(StatusSimulacao.EM_ANDAMENTO);
         interrompidas.forEach(simulacao -> marcarErro(simulacao, MOTIVO_INTERROMPIDA));
         return interrompidas.size();
     }
