@@ -64,6 +64,12 @@ public class CampanhaController {
         return campanhaService.submeter(id, usuario);
     }
 
+    @PostMapping("/{id}/decidir")
+    public CampanhaResponse decidir(@PathVariable long id, @Valid @RequestBody DecidirCampanhaRequest pedido,
+                                    @AuthenticationPrincipal Usuario usuario) {
+        return campanhaService.decidir(id, pedido, usuario);
+    }
+
     @PostMapping("/{id}/editar")
     public CampanhaResponse editar(@PathVariable long id, @AuthenticationPrincipal Usuario usuario) {
         return campanhaService.editar(id, usuario);
