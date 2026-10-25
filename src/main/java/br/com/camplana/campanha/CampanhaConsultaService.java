@@ -1,5 +1,6 @@
 package br.com.camplana.campanha;
 
+import br.com.camplana.dto.campanha.CampanhaAprovadaResponse;
 import br.com.camplana.dto.campanha.CampanhaResponse;
 import br.com.camplana.dto.campanha.CampanhaResumoResponse;
 import br.com.camplana.dto.campanha.FilaCampanhaResponse;
@@ -68,6 +69,15 @@ public class CampanhaConsultaService {
         return versaoRepository
                 .findUltimasPorStatusMenosDoAutor(StatusCampanha.AGUARDANDO_APROVACAO, supervisor.getId())
                 .stream().map(montador::itemDaFila).toList();
+    }
+
+    /**
+     * Campanhas Passadas: todas as aprovadas, de qualquer autor, para Gerente e Supervisor. Aprovada
+     * não volta a rascunho, então a última versão é a aprovada.
+     */
+    public List<CampanhaAprovadaResponse> aprovadas() {
+        return versaoRepository.findUltimasPorStatus(StatusCampanha.APROVADA)
+                .stream().map(montador::aprovada).toList();
     }
 
     private Campanha comAutor(long campanhaId) {

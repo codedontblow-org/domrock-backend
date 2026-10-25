@@ -30,6 +30,15 @@ public interface CampanhaVersaoRepository extends JpaRepository<CampanhaVersao, 
 
     boolean existsByCampanhaId(Long campanhaId);
 
+    /** Campanhas Passadas: a última versão de cada campanha no status pedido, do início mais recente. */
+    @Query("""
+            SELECT v FROM CampanhaVersao v JOIN FETCH v.campanha c JOIN FETCH c.autor
+            WHERE c.status = :status
+              AND v.numero = (SELECT MAX(v2.numero) FROM CampanhaVersao v2 WHERE v2.campanha = c)
+            ORDER BY v.dataInicio DESC, v.id DESC
+            """)
+    List<CampanhaVersao> findUltimasPorStatus(@Param("status") StatusCampanha status);
+
     /** Fila do Supervisor (5.5): a última versão de cada campanha no status pedido, menos as dele. */
     @Query("""
             SELECT v FROM CampanhaVersao v JOIN FETCH v.campanha c JOIN FETCH c.autor

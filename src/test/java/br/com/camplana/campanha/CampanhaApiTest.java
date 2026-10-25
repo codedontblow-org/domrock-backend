@@ -218,6 +218,31 @@ class CampanhaApiTest {
     }
 
     @Test
+    void aprovadasListaSoAsAprovadasDeTodosOsAutores() throws Exception {
+        long aprovada = submeterBlackFriday(gabriela);
+        decidir(aprovada, StatusCampanha.APROVADA, sergio, null);
+        long reprovada = submeterBlackFriday(gabriela);
+        decidir(reprovada, StatusCampanha.REPROVADA, sergio, REPROVACAO);
+        submeterBlackFriday(gabriela);
+
+        enviar(get("/api/campanhas/aprovadas"), silvia)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(aprovada))
+                .andExpect(jsonPath("$[0].nome").value("Black Friday 2025"))
+                .andExpect(jsonPath("$[0].autor.nome").value("Gabriela"))
+                .andExpect(jsonPath("$[0].periodo.data_inicio").value("2025-11-24"))
+                .andExpect(jsonPath("$[0].vigencia").value("ENCERRADA"))
+                .andExpect(jsonPath("$[0].pct_acrescimo").value(1.0))
+                .andExpect(jsonPath("$[0].marcas", contains("10", "30")))
+                .andExpect(jsonPath("$[0].cargos", contains("100", "200", "300")))
+                .andExpect(jsonPath("$[0].custo_adicional").value(23736.10));
+        enviar(get("/api/campanhas/aprovadas"), gabriela)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
     void reprovarGuardaAJustificativa() throws Exception {
         long id = submeterBlackFriday(gabriela);
 

@@ -42,6 +42,11 @@ public class CampanhaController {
         return consulta.fila(usuario);
     }
 
+    @GetMapping("/aprovadas")
+    public List<CampanhaAprovadaResponse> aprovadas() {
+        return consulta.aprovadas();
+    }
+
     @GetMapping("/{id}")
     public CampanhaResponse abrir(@PathVariable long id, @AuthenticationPrincipal Usuario usuario) {
         return consulta.abrir(id, usuario);
