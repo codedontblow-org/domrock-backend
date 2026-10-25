@@ -236,6 +236,8 @@ class CampanhaApiTest {
                 .andExpect(jsonPath("$[0].pct_acrescimo").value(1.0))
                 .andExpect(jsonPath("$[0].marcas", contains("10", "30")))
                 .andExpect(jsonPath("$[0].cargos", contains("100", "200", "300")))
+                .andExpect(jsonPath("$[0].simulacao_id").value(345))
+                .andExpect(jsonPath("$[0].submetida_em").value("2026-10-21T13:05:00Z"))
                 .andExpect(jsonPath("$[0].custo_adicional").value(23736.10));
         enviar(get("/api/campanhas/aprovadas"), gabriela)
                 .andExpect(status().isOk())

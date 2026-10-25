@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -21,5 +22,7 @@ public record CampanhaAprovadaResponse(
         @JsonProperty("pct_acrescimo") JsonNode pctAcrescimo,
         List<String> marcas,
         List<String> cargos,
-        @JsonProperty("custo_adicional") BigDecimal custoAdicional
+        @JsonProperty("custo_adicional") BigDecimal custoAdicional,
+        @JsonProperty("submetida_em") Instant submetidaEm,
+        @JsonProperty("simulacao_id") long simulacaoId
 ) {}

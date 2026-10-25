@@ -73,7 +73,8 @@ public class CampanhaRespostaMontador {
                 campos.pctAcrescimo(versao.getRegra()),
                 escopo.map(e -> List.copyOf(e.marcas())).orElse(List.of()),
                 escopo.map(e -> List.copyOf(e.cargos())).orElse(List.of()),
-                campos.custoAdicional(versao.getResultado()));
+                campos.custoAdicional(versao.getResultado()),
+                versao.getSubmetidaEm(), versao.getSimulacaoId());
     }
 
     /** Versão congelada (5.6). Ações, re-simulação e aprovadas depois ficam com o A6-68. */
