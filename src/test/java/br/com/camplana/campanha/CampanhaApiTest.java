@@ -1,7 +1,6 @@
 package br.com.camplana.campanha;
 
 import br.com.camplana.TestcontainersConfiguration;
-import br.com.camplana.entity.Campanha;
 import br.com.camplana.entity.CampanhaVersao;
 import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
@@ -22,7 +21,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -51,11 +49,9 @@ class CampanhaApiTest {
     @Autowired private MockMvc mvc;
     @Autowired private JwtService jwtService;
     @Autowired private JdbcTemplate jdbc;
-    @Autowired private TransactionTemplate transacao;
     @Autowired private UsuarioRepository usuarioRepository;
     @Autowired private CampanhaRepository campanhaRepository;
     @Autowired private CampanhaVersaoRepository versaoRepository;
-    @Autowired private TrocaDeStatusCampanha trocaDeStatus;
     @Autowired private FakeRegistroSimulacoes simulacoes;
     @Autowired private ContextoCampanhasService contextoCampanhas;
 
@@ -202,6 +198,106 @@ class CampanhaApiTest {
         enviar(get("/api/campanhas/" + id), gabriela)
                 .andExpect(jsonPath("$.status").value("APROVADA"))
                 .andExpect(jsonPath("$.vigencia").value("ENCERRADA"));
+    }
+
+    // ---------- Decidir (5.8) ----------
+
+    @Test
+    void supervisorAprovaAVersaoQueViu() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), sergio, decisao(1, "APROVAR", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APROVADA"))
+                .andExpect(jsonPath("$.versoes[0].status").value("APROVADA"))
+                .andExpect(jsonPath("$.versoes[0].decisao.por.nome").value("Sérgio"))
+                .andExpect(jsonPath("$.log[2].de").value("AGUARDANDO_APROVACAO"))
+                .andExpect(jsonPath("$.log[2].para").value("APROVADA"))
+                .andExpect(jsonPath("$.log[2].versao").value(1));
+        enviar(get("/api/campanhas/fila"), silvia).andExpect(jsonPath("$", empty()));
+    }
+
+    @Test
+    void aprovadasListaSoAsAprovadasDeTodosOsAutores() throws Exception {
+        long aprovada = submeterBlackFriday(gabriela);
+        decidir(aprovada, StatusCampanha.APROVADA, sergio, null);
+        long reprovada = submeterBlackFriday(gabriela);
+        decidir(reprovada, StatusCampanha.REPROVADA, sergio, REPROVACAO);
+        submeterBlackFriday(gabriela);
+
+        enviar(get("/api/campanhas/aprovadas"), silvia)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(aprovada))
+                .andExpect(jsonPath("$[0].nome").value("Black Friday 2025"))
+                .andExpect(jsonPath("$[0].autor.nome").value("Gabriela"))
+                .andExpect(jsonPath("$[0].periodo.data_inicio").value("2025-11-24"))
+                .andExpect(jsonPath("$[0].vigencia").value("ENCERRADA"))
+                .andExpect(jsonPath("$[0].pct_acrescimo").value(1.0))
+                .andExpect(jsonPath("$[0].marcas", contains("10", "30")))
+                .andExpect(jsonPath("$[0].cargos", contains("100", "200", "300")))
+                .andExpect(jsonPath("$[0].simulacao_id").value(345))
+                .andExpect(jsonPath("$[0].submetida_em").value("2026-10-21T13:05:00Z"))
+                .andExpect(jsonPath("$[0].custo_adicional").value(23736.10));
+        enviar(get("/api/campanhas/aprovadas"), gabriela)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void reprovarGuardaAJustificativa() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), sergio, decisao(1, "REPROVAR", "  " + REPROVACAO + " "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REPROVADA"));
+        enviar(get("/api/campanhas/" + id + "/versoes/1"), gabriela)
+                .andExpect(jsonPath("$.decisao.decisao").value("REPROVADA"))
+                .andExpect(jsonPath("$.decisao.justificativa").value(REPROVACAO));
+    }
+
+    @Test
+    void reprovarSemJustificativaDa400() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), sergio, decisao(1, "REPROVAR", "   "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Justificativa obrigatória para reprovar"));
+    }
+
+    @Test
+    void supervisorNaoDecideAPropriaCampanha() throws Exception {
+        long id = submeterBlackFriday(sergio);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), sergio, decisao(1, "APROVAR", null))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Outra pessoa precisa aprovar esta campanha"));
+    }
+
+    @Test
+    void gerenteNaoDecide() throws Exception {
+        long id = submeterBlackFriday(sergio);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), gabriela, decisao(1, "APROVAR", null))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void segundaDecisaoDaMesmaVersaoDa409ComQuemDecidiu() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+        decidir(id, StatusCampanha.APROVADA, sergio, null);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), silvia, decisao(1, "REPROVAR", REPROVACAO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Esta versão já foi decidida por Sérgio em 21/10/2026"));
+    }
+
+    @Test
+    void decidirVersaoInexistenteDa404() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+
+        enviar(post("/api/campanhas/" + id + "/decidir"), sergio, decisao(7, "APROVAR", null))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -369,14 +465,20 @@ class CampanhaApiTest {
         return id;
     }
 
-    /** Faz o papel do "decidir" do A6-68, que ainda não tem rota. */
-    private void decidir(long campanhaId, StatusCampanha decisao, Usuario supervisor, String justificativa) {
-        transacao.executeWithoutResult(tx -> {
-            Campanha campanha = campanhaRepository.findById(campanhaId).orElseThrow();
-            List<CampanhaVersao> versoes = versaoRepository.findByCampanhaIdOrderByNumeroAsc(campanhaId);
-            CampanhaVersao versao = versoes.get(versoes.size() - 1);
-            trocaDeStatus.trocar(campanha, decisao, supervisor, versao, justificativa);
-        });
+    /** Decide a última versão pela rota (5.8). */
+    private void decidir(long campanhaId, StatusCampanha decisao, Usuario supervisor, String justificativa)
+            throws Exception {
+        List<CampanhaVersao> versoes = versaoRepository.findByCampanhaIdOrderByNumeroAsc(campanhaId);
+        int versao = versoes.get(versoes.size() - 1).getNumero();
+        enviar(post("/api/campanhas/" + campanhaId + "/decidir"), supervisor,
+                decisao(versao, decisao == StatusCampanha.APROVADA ? "APROVAR" : "REPROVAR", justificativa))
+                .andExpect(status().isOk());
+    }
+
+    private String decisao(int versao, String decisao, String justificativa) throws Exception {
+        return new ObjectMapper().writeValueAsString(
+                java.util.Map.of("versao", versao, "decisao", decisao,
+                        "justificativa", justificativa == null ? "" : justificativa));
     }
 
     private String chatDa(long campanhaId) {

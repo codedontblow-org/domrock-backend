@@ -55,6 +55,16 @@ public class CamposDaSimulacao {
         return Optional.of(new EscopoCampanha(periodo.get(), comTodasAsMarcas(marcas), cargos));
     }
 
+    /** O mesmo {@link #escopo(JsonNode)}, a partir da ficha gravada numa versão. */
+    public Optional<EscopoCampanha> escopo(String regraJson) {
+        return escopo(objectMapper.readTree(regraJson));
+    }
+
+    /** O mesmo {@link #pctAcrescimo(JsonNode)}, a partir da ficha gravada numa versão. */
+    public JsonNode pctAcrescimo(String regraJson) {
+        return pctAcrescimo(objectMapper.readTree(regraJson));
+    }
+
     /** {@code parametros[key=pct_acrescimo].value} como veio; {@code null} se faltar, e a Lana recusa. */
     public JsonNode pctAcrescimo(JsonNode regra) {
         JsonNode valor = parametro(regra, "pct_acrescimo").path("value");

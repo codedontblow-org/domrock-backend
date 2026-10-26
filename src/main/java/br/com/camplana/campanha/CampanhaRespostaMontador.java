@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Monta o JSON da seção 5 do contrato. Tudo o que a tela mostra sai pronto daqui (front burro):
@@ -59,6 +60,21 @@ public class CampanhaRespostaMontador {
                 new PeriodoCampanha(versao.getDataInicio(), versao.getDataFim()),
                 campos.custoAdicional(versao.getResultado()), campos.quantidadeConflitos(versao.getResultado()),
                 false);
+    }
+
+    /** Item de "Campanhas Passadas": a versão aprovada, com o que a tabela mostra da ficha. */
+    public CampanhaAprovadaResponse aprovada(CampanhaVersao versao) {
+        Campanha campanha = versao.getCampanha();
+        PeriodoCampanha periodo = new PeriodoCampanha(versao.getDataInicio(), versao.getDataFim());
+        Optional<EscopoCampanha> escopo = campos.escopo(versao.getRegra());
+        return new CampanhaAprovadaResponse(campanha.getId(), campanha.getNome(), versao.getNumero(),
+                usuario(campanha.getAutor()), periodo,
+                Vigencia.calcular(campanha.getStatus(), periodo, LocalDate.now(relogio)),
+                campos.pctAcrescimo(versao.getRegra()),
+                escopo.map(e -> List.copyOf(e.marcas())).orElse(List.of()),
+                escopo.map(e -> List.copyOf(e.cargos())).orElse(List.of()),
+                campos.custoAdicional(versao.getResultado()),
+                versao.getSubmetidaEm(), versao.getSimulacaoId());
     }
 
     /** Versão congelada (5.6). Ações, re-simulação e aprovadas depois ficam com o A6-68. */

@@ -42,6 +42,11 @@ public class CampanhaController {
         return consulta.fila(usuario);
     }
 
+    @GetMapping("/aprovadas")
+    public List<CampanhaAprovadaResponse> aprovadas() {
+        return consulta.aprovadas();
+    }
+
     @GetMapping("/{id}")
     public CampanhaResponse abrir(@PathVariable long id, @AuthenticationPrincipal Usuario usuario) {
         return consulta.abrir(id, usuario);
@@ -62,6 +67,12 @@ public class CampanhaController {
     @PostMapping("/{id}/submeter")
     public CampanhaResponse submeter(@PathVariable long id, @AuthenticationPrincipal Usuario usuario) {
         return campanhaService.submeter(id, usuario);
+    }
+
+    @PostMapping("/{id}/decidir")
+    public CampanhaResponse decidir(@PathVariable long id, @Valid @RequestBody DecidirCampanhaRequest pedido,
+                                    @AuthenticationPrincipal Usuario usuario) {
+        return campanhaService.decidir(id, pedido, usuario);
     }
 
     @PostMapping("/{id}/editar")
