@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import br.com.camplana.campanha.DecisaoCampanhaService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,10 +20,13 @@ public class CampanhaController {
 
     private final CampanhaService campanhaService;
     private final CampanhaConsultaService consulta;
+    private final DecisaoCampanhaService decisaoCampanhaService;
 
-    public CampanhaController(CampanhaService campanhaService, CampanhaConsultaService consulta) {
+    public CampanhaController(CampanhaService campanhaService, CampanhaConsultaService consulta, DecisaoCampanhaService decisaoCampanhaService) {
         this.campanhaService = campanhaService;
         this.consulta = consulta;
+        this.decisaoCampanhaService = decisaoCampanhaService;
+
     }
 
     @PostMapping
@@ -72,5 +76,13 @@ public class CampanhaController {
     @PostMapping("/{id}/arquivar")
     public CampanhaResponse arquivar(@PathVariable long id, @AuthenticationPrincipal Usuario usuario) {
         return campanhaService.arquivar(id, usuario);
+    }
+
+    @PostMapping("/{id}/versoes/{numero}/decidir")
+    public CampanhaResponse decidir(@PathVariable long id,
+                                    @PathVariable int numero,
+                                    @Valid @RequestBody DecisaoRequest pedido,
+                                    @AuthenticationPrincipal Usuario usuario) {
+        return decisaoCampanhaService.decidir(id, numero, pedido, usuario);
     }
 }
