@@ -292,14 +292,31 @@ class ValidadorImportacaoServiceTest {
         venda.put("Vlr _Venda", "1234.5");
         Map<String, String> comissao = criarLinhaComissao("M01", "C01");
         comissao.put("%_Comiss", "0.0175");
- 
+
         ValidadorImportacaoService.ResultadoValidacao res = validarOut25(
                 List.of(criarLinhaRh("MATRIC-001", "M01", "C01")), List.of(venda), List.of(comissao));
- 
+
         assertFalse(res.temImpeditivo());
         assertTrue(res.pendencias().isEmpty());
     }
- 
+
+    @Test
+    @DisplayName("Validar lote contendo apenas planilha de comissão deve ser válido")
+    void deveValidarLoteContendoApenasComissao() {
+        Map<String, String> comissao = criarLinhaComissao("M01", "C01");
+        comissao.put("%_Comiss", "0.025");
+
+        ValidadorImportacaoService.ResultadoValidacao res = validador.validarLote(
+                "RH", Collections.emptyList(),
+                "VENDAS", Collections.emptyList(),
+                "BASE_COMMISS_FINAL.xlsx", List.of(comissao)
+        );
+
+        assertFalse(res.temImpeditivo());
+        assertTrue(res.valido());
+        assertTrue(res.pendencias().isEmpty());
+    }
+
     private ValidadorImportacaoService.ResultadoValidacao validarOut25(
             List<Map<String, String>> rh, List<Map<String, String>> vendas, List<Map<String, String>> comissao) {
         return validador.validarLote(

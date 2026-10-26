@@ -47,9 +47,17 @@ public class ValidadorImportacaoService {
             ));
         }
 
+        // A Comissao pode ir sozinha (A6-79): uma base ja importada sem a BASE_COMMISS_FINAL nao tinha
+        // como receber os %, porque reenviar RH e Vendas do mes cai em "competencia ja foi importada".
+        boolean apenasComissao = (linhasRh == null || linhasRh.isEmpty())
+                && (linhasVendas == null || linhasVendas.isEmpty())
+                && (linhasComissao != null && !linhasComissao.isEmpty());
+
         // Validação de Colunas Obrigatórias
-        validarColunas(nomeRh, linhasRh, COLS_RH, pendencias);
-        validarColunas(nomeVendas, linhasVendas, COLS_VENDAS, pendencias);
+        if (!apenasComissao) {
+            validarColunas(nomeRh, linhasRh, COLS_RH, pendencias);
+            validarColunas(nomeVendas, linhasVendas, COLS_VENDAS, pendencias);
+        }
         if (linhasComissao != null && !linhasComissao.isEmpty()) {
             validarColunas(nomeComissao, linhasComissao, COLS_COMISSAO, pendencias);
         }
@@ -67,57 +75,61 @@ public class ValidadorImportacaoService {
         Set<String> matriculasRh = new HashSet<>();
         Set<String> paresMarcaCargoRh = new HashSet<>();
 
-        for (int i = 0; i < linhasRh.size(); i++) {
-            Map<String, String> r = linhasRh.get(i);
-            int numLinha = i + 2; // Linha 1 é cabeçalho
+        if (linhasRh != null) {
+            for (int i = 0; i < linhasRh.size(); i++) {
+                Map<String, String> r = linhasRh.get(i);
+                int numLinha = i + 2; // Linha 1 é cabeçalho
 
-            String mat = r.get("Matricula");
-            if (mat == null || mat.isBlank()) {
-                pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Matricula", "Matrícula não informada", PendenciaImportacao.IMPEDITIVO));
-            } else {
-                matriculasRh.add(mat.trim());
-            }
+                String mat = r.get("Matricula");
+                if (mat == null || mat.isBlank()) {
+                    pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Matricula", "Matrícula não informada", PendenciaImportacao.IMPEDITIVO));
+                } else {
+                    matriculasRh.add(mat.trim());
+                }
 
-            // Matrícula sem loja ou cargo no RH gera IMPEDITIVO
-            String codLoja = r.get("Cod_Loja");
-            if (codLoja == null || codLoja.isBlank()) {
-                pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Cod_Loja", "Funcionário sem loja informada", PendenciaImportacao.IMPEDITIVO));
-            }
+                // Matrícula sem loja ou cargo no RH gera IMPEDITIVO
+                String codLoja = r.get("Cod_Loja");
+                if (codLoja == null || codLoja.isBlank()) {
+                    pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Cod_Loja", "Funcionário sem loja informada", PendenciaImportacao.IMPEDITIVO));
+                }
 
-            String codCargo = r.get("Cod_Cargo");
-            if (codCargo == null || codCargo.isBlank()) {
-                pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Cod_Cargo", "Funcionário sem cargo informado", PendenciaImportacao.IMPEDITIVO));
-            }
+                String codCargo = r.get("Cod_Cargo");
+                if (codCargo == null || codCargo.isBlank()) {
+                    pendencias.add(new PendenciaImportacao(nomeRh, numLinha, "Cod_Cargo", "Funcionário sem cargo informado", PendenciaImportacao.IMPEDITIVO));
+                }
 
-            String codMarca = r.get("Cod_Marca");
-            if (codMarca != null && codCargo != null && !codMarca.isBlank() && !codCargo.isBlank()) {
-                paresMarcaCargoRh.add(codMarca.trim() + "#" + codCargo.trim());
+                String codMarca = r.get("Cod_Marca");
+                if (codMarca != null && codCargo != null && !codMarca.isBlank() && !codCargo.isBlank()) {
+                    paresMarcaCargoRh.add(codMarca.trim() + "#" + codCargo.trim());
+                }
             }
         }
 
         // Validação Cruzada: Vendas -> RH
         Set<String> matriculasComVenda = new HashSet<>();
-        for (int i = 0; i < linhasVendas.size(); i++) {
-            Map<String, String> v = linhasVendas.get(i);
-            int numLinha = i + 2;
+        if (linhasVendas != null) {
+            for (int i = 0; i < linhasVendas.size(); i++) {
+                Map<String, String> v = linhasVendas.get(i);
+                int numLinha = i + 2;
 
-            String matriculaVenda = v.get("Matricula");
-            if (matriculaVenda != null && !matriculaVenda.isBlank()) {
-                String mat = matriculaVenda.trim();
-                matriculasComVenda.add(mat);
+                String matriculaVenda = v.get("Matricula");
+                if (matriculaVenda != null && !matriculaVenda.isBlank()) {
+                    String mat = matriculaVenda.trim();
+                    matriculasComVenda.add(mat);
 
-                // AVISO e nao IMPEDITIVO (decisao do PO, 19/10): a base real tem 60 vendas assim em
-                // ago-dez/2025 (R$ 97.871,75) e, como impeditivo, so julho entrava. O ImportadorVendasService
-                // ja descarta a venda sem RH na competencia; o aviso so torna o descarte visivel.
-                if (!matriculasRh.contains(mat)) {
-                    pendencias.add(new PendenciaImportacao(
-                            "Cruzamento",
-                            numLinha,
-                            "Matricula",
-                            "matrícula " + mat + " não encontrada no RH da competência; a venda de "
-                                    + v.get("Date_Ref") + " (R$ " + v.get("Vlr _Venda") + ") não será gravada",
-                            PendenciaImportacao.AVISO
-                    ));
+                    // AVISO e nao IMPEDITIVO (decisao do PO, 19/10): a base real tem 60 vendas assim em
+                    // ago-dez/2025 (R$ 97.871,75) e, como impeditivo, so julho entrava. O ImportadorVendasService
+                    // ja descarta a venda sem RH na competencia; o aviso so torna o descarte visivel.
+                    if (!matriculasRh.contains(mat)) {
+                        pendencias.add(new PendenciaImportacao(
+                                "Cruzamento",
+                                numLinha,
+                                "Matricula",
+                                "matrícula " + mat + " não encontrada no RH da competência; a venda de "
+                                        + v.get("Date_Ref") + " (R$ " + v.get("Vlr _Venda") + ") não será gravada",
+                                PendenciaImportacao.AVISO
+                        ));
+                    }
                 }
             }
         }
