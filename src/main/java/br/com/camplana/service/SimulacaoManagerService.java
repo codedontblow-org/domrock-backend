@@ -102,9 +102,10 @@ public class SimulacaoManagerService {
         if (ehAutor) {
             return;
         }
+        // A re-simulação (5.9) é de uma versão submetida: qualquer Supervisor a acompanha, como a versão.
         boolean supervisorComCampanhaSubmetida = leitor.getPerfil() == Perfil.SUPERVISOR
-                && simulacao.getCampanha() != null
-                && campanhaVersaoRepository.existsByCampanhaId(simulacao.getCampanha().getId());
+                && (simulacao.getVersao() != null || (simulacao.getCampanha() != null
+                && campanhaVersaoRepository.existsByCampanhaId(simulacao.getCampanha().getId())));
         if (!supervisorComCampanhaSubmetida) {
             throw new ForbiddenException("A simulação " + simulacao.getId() + " pertence a outro usuário");
         }

@@ -41,8 +41,9 @@ public class SecurityConfig {
                     req.requestMatchers("/api/chat/**").hasAnyRole("GERENTE", "SUPERVISOR");
                     req.requestMatchers("/api/simulacoes/**").hasAnyRole("GERENTE", "SUPERVISOR");
 
-                    // SUPERVISOR -> DECIDE CAMPANHA
+                    // SUPERVISOR -> DECIDE E RE-SIMULA CAMPANHA
                     req.requestMatchers(HttpMethod.POST, "/api/campanhas/*/decidir").hasRole("SUPERVISOR");
+                    req.requestMatchers(HttpMethod.POST, "/api/campanhas/*/versoes/*/resimular").hasRole("SUPERVISOR");
 
                     // SUPERVISOR -> FILA DE APROVACAO (antes do /** abaixo: vale a primeira linha que casa)
                     req.requestMatchers(HttpMethod.GET, "/api/campanhas/fila").hasRole("SUPERVISOR");

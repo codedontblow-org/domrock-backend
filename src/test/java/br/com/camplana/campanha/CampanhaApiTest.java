@@ -1,30 +1,9 @@
 package br.com.camplana.campanha;
 
-import br.com.camplana.TestcontainersConfiguration;
-import br.com.camplana.entity.CampanhaVersao;
 import br.com.camplana.entity.StatusCampanha;
-import br.com.camplana.entity.Usuario;
-import br.com.camplana.repository.CampanhaRepository;
-import br.com.camplana.repository.CampanhaVersaoRepository;
-import br.com.camplana.repository.UsuarioRepository;
-import br.com.camplana.security.JwtService;
 import com.jayway.jsonpath.JsonPath;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -37,38 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Critérios de aceite do A6-64 pela API, com Postgres real (V7) e o registro de simulações falso. */
-@Import({TestcontainersConfiguration.class, CampanhaTestConfig.class})
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-class CampanhaApiTest {
-
-    private static final String REPROVACAO =
-            "a meta de R$ 2 milhões está abaixo da venda real do período (R$ 2,4 milhões)";
-
-    @Autowired private MockMvc mvc;
-    @Autowired private JwtService jwtService;
-    @Autowired private JdbcTemplate jdbc;
-    @Autowired private UsuarioRepository usuarioRepository;
-    @Autowired private CampanhaRepository campanhaRepository;
-    @Autowired private CampanhaVersaoRepository versaoRepository;
-    @Autowired private FakeRegistroSimulacoes simulacoes;
-    @Autowired private ContextoCampanhasService contextoCampanhas;
-
-    private Usuario gabriela, sergio, silvia;
-    private long proximaSimulacao;
-
-    @BeforeEach
-    void limparCampanhas() {
-        jdbc.execute("DELETE FROM campanha_status_log");
-        jdbc.execute("DELETE FROM campanha_versao");
-        jdbc.execute("DELETE FROM campanha");
-        simulacoes.limpar();
-        proximaSimulacao = 345;
-        gabriela = usuarioRepository.findById(1).orElseThrow();
-        sergio = usuarioRepository.findById(2).orElseThrow();
-        silvia = usuarioRepository.findById(3).orElseThrow();
-    }
+class CampanhaApiTest extends CampanhaApiBase {
 
     // ---------- Salvar (5.3) ----------
 
@@ -445,59 +393,5 @@ class CampanhaApiTest {
         pedido.put("chat_id", chatDa(pendente));
         var semPropria = contextoCampanhas.enriquecer(pedido).path("campanhas");
         assertThat(semPropria).extracting(f -> f.path("campanha_id").asLong()).containsExactly(aprovada);
-    }
-
-    // ---------- Apoio ----------
-
-    private long salvarBlackFriday(Usuario autor) throws Exception {
-        String chatId = UUID.randomUUID().toString();
-        long simulacaoId = proximaSimulacao++;
-        simulacoes.concluida(simulacaoId, autor.getId(), chatId);
-        String resposta = enviar(post("/api/campanhas"), autor, salvar("Black Friday 2025", chatId, simulacaoId))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        return ((Number) JsonPath.read(resposta, "$.id")).longValue();
-    }
-
-    private long submeterBlackFriday(Usuario autor) throws Exception {
-        long id = salvarBlackFriday(autor);
-        enviar(post("/api/campanhas/" + id + "/submeter"), autor).andExpect(status().isOk());
-        return id;
-    }
-
-    /** Decide a última versão pela rota (5.8). */
-    private void decidir(long campanhaId, StatusCampanha decisao, Usuario supervisor, String justificativa)
-            throws Exception {
-        List<CampanhaVersao> versoes = versaoRepository.findByCampanhaIdOrderByNumeroAsc(campanhaId);
-        int versao = versoes.get(versoes.size() - 1).getNumero();
-        enviar(post("/api/campanhas/" + campanhaId + "/decidir"), supervisor,
-                decisao(versao, decisao == StatusCampanha.APROVADA ? "APROVAR" : "REPROVAR", justificativa))
-                .andExpect(status().isOk());
-    }
-
-    private String decisao(int versao, String decisao, String justificativa) throws Exception {
-        return new ObjectMapper().writeValueAsString(
-                java.util.Map.of("versao", versao, "decisao", decisao,
-                        "justificativa", justificativa == null ? "" : justificativa));
-    }
-
-    private String chatDa(long campanhaId) {
-        return campanhaRepository.findById(campanhaId).orElseThrow().getChatId();
-    }
-
-    private static String salvar(String nome, String chatId, long simulacaoId) {
-        return "{\"nome\": \"%s\", \"chat_id\": \"%s\", \"simulacao_id\": %d}".formatted(nome, chatId, simulacaoId);
-    }
-
-    private ResultActions enviar(MockHttpServletRequestBuilder pedido, Usuario usuario) throws Exception {
-        return mvc.perform(pedido.header("Authorization", "Bearer " + token(usuario)));
-    }
-
-    private ResultActions enviar(MockHttpServletRequestBuilder pedido, Usuario usuario, String json) throws Exception {
-        return enviar(pedido.contentType(MediaType.APPLICATION_JSON).content(json), usuario);
-    }
-
-    private String token(Usuario usuario) {
-        return jwtService.gerarToken(usuario, jwtService.getExpirationDate());
     }
 }

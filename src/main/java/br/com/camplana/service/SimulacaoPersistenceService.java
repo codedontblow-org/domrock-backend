@@ -1,6 +1,7 @@
 package br.com.camplana.service;
 
 import br.com.camplana.entity.Campanha;
+import br.com.camplana.entity.CampanhaVersao;
 import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusSimulacao;
@@ -42,6 +43,14 @@ public class SimulacaoPersistenceService {
         simulacao.setEtapa(EtapaSimulacao.NA_FILA);
         simulacao.setFicha(fichaJson);
         simulacao.setCriadaEm(Instant.now(relogio));
+        return simulacaoRepository.saveAndFlush(simulacao);
+    }
+
+    /** Re-simulação do Supervisor (5.9): da versão, sem campanha, para não virar a última simulação do autor. */
+    @Transactional
+    public Simulacao criarResimulacao(Usuario supervisor, String chatId, CampanhaVersao versao) {
+        Simulacao simulacao = criarSimulacaoInicial(supervisor, chatId, null, versao.getRegra());
+        simulacao.setVersao(versao);
         return simulacaoRepository.saveAndFlush(simulacao);
     }
 

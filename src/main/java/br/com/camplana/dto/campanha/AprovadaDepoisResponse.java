@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 
-/** Item de {@code aprovadas_depois} na versão (contrato 5.6). Preenchido pelo A6-68. */
+/** Item de {@code aprovadas_depois} na versão (contrato 5.6): outra campanha do período aprovada depois. */
 public record AprovadaDepoisResponse(
         @JsonProperty("campanha_id") long campanhaId,
         String nome,

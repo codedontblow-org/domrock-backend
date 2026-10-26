@@ -5,7 +5,6 @@ import br.com.camplana.dto.campanha.DecidirCampanhaRequest;
 import br.com.camplana.dto.campanha.PeriodoCampanha;
 import br.com.camplana.dto.campanha.SalvarCampanhaRequest;
 import br.com.camplana.entity.Campanha;
-import br.com.camplana.entity.CampanhaStatusLog;
 import br.com.camplana.entity.CampanhaVersao;
 import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
@@ -21,9 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 /**
  * Ações sobre a campanha (contrato 5.3 e 5.7). Cada uma confere a permissão em
@@ -35,9 +31,6 @@ import java.util.Objects;
 public class CampanhaService {
 
     private static final int NOME_MAXIMO = 150;
-    // O dia da decisão no horário de Brasília, como o usuário lê na mensagem do 409.
-    private static final DateTimeFormatter DIA =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("America/Sao_Paulo"));
     private static final String INDICE_UMA_POR_CONVERSA = "uk_campanha_chat"; // V7
 
     private final CampanhaRepository campanhaRepository;
@@ -47,12 +40,13 @@ public class CampanhaService {
     private final CarregadorRetratoCampanha carregador;
     private final CampanhaRespostaMontador montador;
     private final CamposDaSimulacao campos;
+    private final AprovacaoDaVersao aprovacao;
     private final Clock relogio;
 
     public CampanhaService(CampanhaRepository campanhaRepository, CampanhaVersaoRepository versaoRepository,
                            RegistroSimulacoes registroSimulacoes, TrocaDeStatusCampanha trocaDeStatus,
                            CarregadorRetratoCampanha carregador, CampanhaRespostaMontador montador,
-                           CamposDaSimulacao campos, Clock relogio) {
+                           CamposDaSimulacao campos, AprovacaoDaVersao aprovacao, Clock relogio) {
         this.campanhaRepository = campanhaRepository;
         this.versaoRepository = versaoRepository;
         this.registroSimulacoes = registroSimulacoes;
@@ -60,6 +54,7 @@ public class CampanhaService {
         this.carregador = carregador;
         this.montador = montador;
         this.campos = campos;
+        this.aprovacao = aprovacao;
         this.relogio = relogio;
     }
 
@@ -102,44 +97,22 @@ public class CampanhaService {
     public CampanhaResponse decidir(long campanhaId, DecidirCampanhaRequest pedido, Usuario supervisor) {
         Campanha campanha = paraAlterar(campanhaId);
         RetratoCampanha retrato = carregador.carregar(campanha);
-        if (Objects.equals(campanha.getAutor().getId(), supervisor.getId())) {
-            throw new ForbiddenException("Outra pessoa precisa aprovar esta campanha");
-        }
         CampanhaVersao versao = retrato.versao(pedido.versao())
                 .orElseThrow(() -> new NotFoundException("Versão " + pedido.versao() + " da campanha "
                         + campanhaId + " não encontrada"));
-        exigirVersaoPendente(retrato, versao);
+        boolean reprovar = pedido.decisao() == DecidirCampanhaRequest.Decisao.REPROVAR;
+        SituacaoVersao situacao = aprovacao.situacao(retrato, versao, aprovacao.pendencias(retrato, versao));
+        // Justificativa (só reprovar) e re-simulação (só aprovar) nunca se cruzam: a ordem do 5.8 se mantém.
+        PermissoesVersao.exigir(reprovar ? AcaoVersao.REPROVAR : AcaoVersao.APROVAR, situacao, supervisor);
 
         String justificativa = pedido.justificativa() == null || pedido.justificativa().isBlank()
                 ? null : pedido.justificativa().strip();
-        boolean reprovar = pedido.decisao() == DecidirCampanhaRequest.Decisao.REPROVAR;
         if (reprovar && justificativa == null) {
             throw new BadRequestException("Justificativa obrigatória para reprovar");
         }
         StatusCampanha para = reprovar ? StatusCampanha.REPROVADA : StatusCampanha.APROVADA;
         trocaDeStatus.trocar(campanha, para, supervisor, versao, justificativa);
         return montador.campanha(carregador.carregar(campanha), supervisor);
-    }
-
-    // Só a última versão, com a campanha ainda aguardando, pode ser decidida; vale a primeira decisão.
-    private void exigirVersaoPendente(RetratoCampanha retrato, CampanhaVersao versao) {
-        boolean pendente = retrato.campanha().getStatus() == StatusCampanha.AGUARDANDO_APROVACAO
-                && retrato.versaoAtual().map(atual -> atual.getId().equals(versao.getId())).orElse(false);
-        if (pendente) {
-            return;
-        }
-        throw retrato.log().stream()
-                .filter(linha -> linha.getVersao() != null && linha.getVersao().getId().equals(versao.getId()))
-                .filter(linha -> linha.getPara() == StatusCampanha.APROVADA || linha.getPara() == StatusCampanha.REPROVADA)
-                .findFirst()
-                .map(CampanhaService::jaDecidida)
-                .orElseGet(() -> new ConflictException("A v" + versao.getNumero() + " da campanha "
-                        + retrato.campanha().getId() + " não está aguardando aprovação"));
-    }
-
-    private static ConflictException jaDecidida(CampanhaStatusLog decisao) {
-        String dia = DIA.format(decisao.getEm());
-        return new ConflictException("Esta versão já foi decidida por " + decisao.getUsuario().getNome() + " em " + dia);
     }
 
     /** REPROVADA -> RASCUNHO: a próxima submissão será a versão seguinte. */

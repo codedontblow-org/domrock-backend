@@ -2,7 +2,9 @@ package br.com.camplana.controller;
 
 import br.com.camplana.campanha.CampanhaConsultaService;
 import br.com.camplana.campanha.CampanhaService;
+import br.com.camplana.campanha.ResimulacaoService;
 import br.com.camplana.dto.campanha.*;
+import br.com.camplana.dto.simulacao.SimulacaoCriadaResponse;
 import br.com.camplana.entity.Usuario;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -19,10 +21,13 @@ public class CampanhaController {
 
     private final CampanhaService campanhaService;
     private final CampanhaConsultaService consulta;
+    private final ResimulacaoService resimulacao;
 
-    public CampanhaController(CampanhaService campanhaService, CampanhaConsultaService consulta) {
+    public CampanhaController(CampanhaService campanhaService, CampanhaConsultaService consulta,
+                              ResimulacaoService resimulacao) {
         this.campanhaService = campanhaService;
         this.consulta = consulta;
+        this.resimulacao = resimulacao;
     }
 
     @PostMapping
@@ -73,6 +78,12 @@ public class CampanhaController {
     public CampanhaResponse decidir(@PathVariable long id, @Valid @RequestBody DecidirCampanhaRequest pedido,
                                     @AuthenticationPrincipal Usuario usuario) {
         return campanhaService.decidir(id, pedido, usuario);
+    }
+
+    @PostMapping("/{id}/versoes/{numero}/resimular")
+    public ResponseEntity<SimulacaoCriadaResponse> resimular(@PathVariable long id, @PathVariable int numero,
+                                                             @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resimulacao.resimular(id, numero, usuario));
     }
 
     @PostMapping("/{id}/editar")

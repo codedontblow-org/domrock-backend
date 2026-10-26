@@ -73,10 +73,12 @@ public class LanaClient {
         corpo.put("response", resposta.getResposta());
         corpo.set("events", lerJson(resposta.getEventsJson(), objectMapper.createArrayNode()));
         corpo.set("regra", lerJson(resposta.getRegraJson(), objectMapper.getNodeFactory().nullNode()));
+        corpo.set("trilha", lerJson(resposta.getTrilhaJson(), objectMapper.getNodeFactory().nullNode()));
         return corpo;
     }
 
-    // Eventos e ficha viajam como texto JSON no .proto; vazio = não vieram (guardrail ou turno sem ficha nova).
+    // Eventos, ficha e trilha viajam como texto JSON no .proto; vazio = não vieram (guardrail, turno sem
+    // ficha nova ou resposta sem ferramenta).
     private JsonNode lerJson(String json, JsonNode seVazio) {
         return json.isEmpty() ? seVazio : objectMapper.readTree(json);
     }

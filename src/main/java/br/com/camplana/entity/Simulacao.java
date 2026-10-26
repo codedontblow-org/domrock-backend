@@ -32,6 +32,11 @@ public class Simulacao {
     @JoinColumn(name = "campanha_id")
     private Campanha campanha;
 
+    // Só na re-simulação do Supervisor (A6-68, contrato 5.9): a versão re-simulada. Aí campanha fica nula.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "versao_id")
+    private CampanhaVersao versao;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private StatusSimulacao status;

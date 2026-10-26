@@ -4,6 +4,7 @@ import br.com.camplana.dto.campanha.*;
 import br.com.camplana.entity.Campanha;
 import br.com.camplana.entity.CampanhaStatusLog;
 import br.com.camplana.entity.CampanhaVersao;
+import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
 import org.springframework.stereotype.Component;
@@ -24,10 +25,12 @@ import java.util.Optional;
 public class CampanhaRespostaMontador {
 
     private final CamposDaSimulacao campos;
+    private final AprovacaoDaVersao aprovacao;
     private final Clock relogio;
 
-    public CampanhaRespostaMontador(CamposDaSimulacao campos, Clock relogio) {
+    public CampanhaRespostaMontador(CamposDaSimulacao campos, AprovacaoDaVersao aprovacao, Clock relogio) {
         this.campos = campos;
+        this.aprovacao = aprovacao;
         this.relogio = relogio;
     }
 
@@ -52,14 +55,14 @@ public class CampanhaRespostaMontador {
                 campanha.getAtualizadaEm());
     }
 
-    /** Item da fila (5.5). {@code resimulacao_necessaria} fica com o A6-68. */
+    /** Item da fila (5.5). */
     public FilaCampanhaResponse itemDaFila(CampanhaVersao versao) {
         Campanha campanha = versao.getCampanha();
         return new FilaCampanhaResponse(campanha.getId(), campanha.getNome(), versao.getNumero(),
                 usuario(campanha.getAutor()), versao.getSubmetidaEm(),
                 new PeriodoCampanha(versao.getDataInicio(), versao.getDataFim()),
                 campos.custoAdicional(versao.getResultado()), campos.quantidadeConflitos(versao.getResultado()),
-                false);
+                aprovacao.pendenciasDeVersaoAguardando(versao).resimulacaoNecessaria());
     }
 
     /** Item de "Campanhas Passadas": a versão aprovada, com o que a tabela mostra da ficha. */
@@ -73,17 +76,37 @@ public class CampanhaRespostaMontador {
                 campos.pctAcrescimo(versao.getRegra()),
                 escopo.map(e -> List.copyOf(e.marcas())).orElse(List.of()),
                 escopo.map(e -> List.copyOf(e.cargos())).orElse(List.of()),
-                campos.custoAdicional(versao.getResultado()),
+                campos.custoAdicional(aprovacao.resultadoDecidido(versao)),
                 versao.getSubmetidaEm(), versao.getSimulacaoId());
     }
 
-    /** Versão congelada (5.6). Ações, re-simulação e aprovadas depois ficam com o A6-68. */
-    public VersaoCampanhaResponse versao(RetratoCampanha retrato, CampanhaVersao versao) {
+    /** Versão congelada (5.6), com as {@code acoes} de {@code leitor}. */
+    public VersaoCampanhaResponse versao(RetratoCampanha retrato, CampanhaVersao versao, Usuario leitor) {
         List<CampanhaStatusLog> daVersao = logDaVersao(retrato.log(), versao);
+        PendenciasDaVersao pendencias = aprovacao.pendencias(retrato, versao);
+        SituacaoVersao situacao = aprovacao.situacao(retrato, versao, pendencias);
         return new VersaoCampanhaResponse(retrato.campanha().getId(), versao.getNumero(),
-                statusDaVersao(daVersao), List.of(), usuario(retrato.campanha().getAutor()),
-                versao.getSubmetidaEm(), versao.getSimulacaoId(), versao.getRegra(), versao.getResultado(),
-                versao.getUltimaMensagemId(), false, List.of(), null, decisao(daVersao));
+                statusDaVersao(daVersao), PermissoesVersao.acoes(situacao, leitor),
+                usuario(retrato.campanha().getAutor()), versao.getSubmetidaEm(), versao.getSimulacaoId(),
+                versao.getRegra(), versao.getResultado(), versao.getUltimaMensagemId(),
+                situacao.resimulacaoNecessaria(), aprovadasDepois(pendencias), resimulacao(pendencias),
+                decisao(daVersao));
+    }
+
+    private static List<AprovadaDepoisResponse> aprovadasDepois(PendenciasDaVersao pendencias) {
+        return pendencias.aprovadasDepois().stream().map(linha -> {
+            Campanha outra = linha.getVersao().getCampanha();
+            return new AprovadaDepoisResponse(outra.getId(), outra.getNome(), linha.getUsuario().getNome(), linha.getEm());
+        }).toList();
+    }
+
+    private static ResimulacaoResponse resimulacao(PendenciasDaVersao pendencias) {
+        Simulacao simulacao = pendencias.resimulacao();
+        if (simulacao == null) {
+            return null;
+        }
+        return new ResimulacaoResponse(simulacao.getId(), usuario(simulacao.getUsuario()), simulacao.getConcluidaEm(),
+                simulacao.getResultado());
     }
 
     private Vigencia vigencia(RetratoCampanha retrato) {

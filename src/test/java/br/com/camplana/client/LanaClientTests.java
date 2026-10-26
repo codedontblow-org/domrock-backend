@@ -50,6 +50,7 @@ class LanaClientTests {
 
     private static final String REGRA_JSON = "{\"rule_id\":\"bf-1\",\"faltantes\":[]}";
     private static final String EVENTOS_JSON = "[{\"type\":\"tool_call\",\"tool\":\"registrar_parametros_regra\"}]";
+    private static final String TRILHA_JSON = "{\"modelo\":\"gemini\",\"passos\":[{\"ordem\":1,\"ferramenta\":\"consultar_banco\"}]}";
 
     /** Último pedido recebido pelo servidor, para verificar o que o Java enviou. */
     private static final AtomicReference<InvokeRequest> ULTIMO_PEDIDO = new AtomicReference<>();
@@ -76,6 +77,8 @@ class LanaClientTests {
                 case "demorar" -> observer.onError(Status.DEADLINE_EXCEEDED.withDescription("A Lana demorou demais").asRuntimeException());
                 case "registrar campanha" -> responder(observer, InvokeResponse.newBuilder()
                         .setResposta("Registrei a campanha.").setEventsJson(EVENTOS_JSON).setRegraJson(REGRA_JSON).build());
+                case "consultar vendas" -> responder(observer, InvokeResponse.newBuilder()
+                        .setResposta("A marca 30 vendeu R$ 333.666,01.").setTrilhaJson(TRILHA_JSON).build());
                 default -> responder(observer, InvokeResponse.newBuilder()
                         .setResposta("Resposta da Lana para: " + request.getPrompt()).build());
             }
@@ -144,6 +147,14 @@ class LanaClientTests {
         assertThat(resultado.get("events").isArray()).isTrue();
         assertThat(resultado.get("events")).isEmpty();
         assertThat(resultado.get("regra").isNull()).isTrue();
+        assertThat(resultado.get("trilha").isNull()).isTrue();
+    }
+
+    @Test
+    void invocarAgenteDevolveATrilhaDoTurno() {
+        JsonNode resultado = lanaClient.invocarAgente(Map.of("message", "consultar vendas", "chat_id", "chat-1"));
+
+        assertThat(resultado.get("trilha").get("passos").get(0).get("ferramenta").asString()).isEqualTo("consultar_banco");
     }
 
     @Test
