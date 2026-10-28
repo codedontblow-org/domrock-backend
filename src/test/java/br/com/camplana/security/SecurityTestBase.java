@@ -7,6 +7,7 @@ import br.com.camplana.entity.Usuario;
 import br.com.camplana.handler.SecurityErrorHandler;
 import br.com.camplana.mapper.UsuarioMapper;
 import br.com.camplana.repository.UsuarioRepository;
+import br.com.camplana.service.ChatService;
 import br.com.camplana.service.SimulacaoManagerService;
 import br.com.camplana.service.UsuarioService;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,7 @@ public abstract class SecurityTestBase {
     @Autowired protected JwtService jwtService;
 
     @MockitoBean protected UsuarioRepository usuarioRepository;
+    @MockitoBean protected ChatService chatService;
     @MockitoBean protected LanaClient lanaClient;
     @MockitoBean protected SimulacaoManagerService simulacaoManagerService;
     @MockitoBean protected ImportacaoManagerService managerService;

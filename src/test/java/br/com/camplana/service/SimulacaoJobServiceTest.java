@@ -1,12 +1,14 @@
 package br.com.camplana.service;
 
-import br.com.camplana.client.LanaSimulacaoClient;
+import br.com.camplana.campanha.CamposDaSimulacao;
 import br.com.camplana.campanha.ContextoCampanhasService;
+import br.com.camplana.client.LanaSimulacaoClient;
 import br.com.camplana.entity.EtapaSimulacao;
 import br.com.camplana.entity.Simulacao;
 import br.com.camplana.entity.StatusSimulacao;
 import br.com.camplana.exception.LanaIndisponivelException;
 import br.com.camplana.exception.LanaRespostaException;
+import br.com.camplana.repository.MensagemChatRepository;
 import br.com.camplana.repository.SimulacaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -146,9 +148,11 @@ class SimulacaoJobServiceTest {
     @Test
     void processarSimulacaoEmTimeoutMarcaStatusErroComEtapaErroEObjetoTempo() {
         SimulacaoRepository repo = mock(SimulacaoRepository.class);
+        MensagemChatRepository mensagemChatRepo = mock(MensagemChatRepository.class);
+        CamposDaSimulacao camposDaSimulacao = new CamposDaSimulacao(JSON);
         Instant agora = Instant.parse("2026-10-21T13:05:00Z");
         SimulacaoPersistenceService realPersistence = new SimulacaoPersistenceService(
-                repo, Clock.fixed(agora, ZoneOffset.UTC));
+                repo, mensagemChatRepo, camposDaSimulacao, Clock.fixed(agora, ZoneOffset.UTC));
         SimulacaoJobService serviceComPersistenceReal = new SimulacaoJobService(
                 realPersistence, lanaSimulacaoClient, JSON, contextoCampanhas);
 

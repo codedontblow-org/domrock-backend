@@ -6,6 +6,7 @@ import br.com.camplana.dto.campanha.PeriodoCampanha;
 import br.com.camplana.dto.campanha.SalvarCampanhaRequest;
 import br.com.camplana.entity.Campanha;
 import br.com.camplana.entity.CampanhaVersao;
+import br.com.camplana.entity.MensagemChat;
 import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.exception.BadRequestException;
@@ -14,6 +15,7 @@ import br.com.camplana.exception.ForbiddenException;
 import br.com.camplana.exception.NotFoundException;
 import br.com.camplana.repository.CampanhaRepository;
 import br.com.camplana.repository.CampanhaVersaoRepository;
+import br.com.camplana.repository.MensagemChatRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class CampanhaService {
 
     private final CampanhaRepository campanhaRepository;
     private final CampanhaVersaoRepository versaoRepository;
+    private final MensagemChatRepository mensagemChatRepository;
     private final RegistroSimulacoes registroSimulacoes;
     private final TrocaDeStatusCampanha trocaDeStatus;
     private final CarregadorRetratoCampanha carregador;
@@ -44,11 +47,13 @@ public class CampanhaService {
     private final Clock relogio;
 
     public CampanhaService(CampanhaRepository campanhaRepository, CampanhaVersaoRepository versaoRepository,
+                           MensagemChatRepository mensagemChatRepository,
                            RegistroSimulacoes registroSimulacoes, TrocaDeStatusCampanha trocaDeStatus,
                            CarregadorRetratoCampanha carregador, CampanhaRespostaMontador montador,
                            CamposDaSimulacao campos, AprovacaoDaVersao aprovacao, Clock relogio) {
         this.campanhaRepository = campanhaRepository;
         this.versaoRepository = versaoRepository;
+        this.mensagemChatRepository = mensagemChatRepository;
         this.registroSimulacoes = registroSimulacoes;
         this.trocaDeStatus = trocaDeStatus;
         this.carregador = carregador;
@@ -84,7 +89,16 @@ public class CampanhaService {
         Campanha campanha = paraAlterar(campanhaId);
         RetratoCampanha retrato = carregador.carregar(campanha);
         PermissoesCampanha.exigir(AcaoCampanha.SUBMETER, retrato.situacao(), autor.getId());
-        CampanhaVersao versao = versaoRepository.save(congelar(retrato));
+
+        int numero = retrato.versaoAtual().map(versao -> versao.getNumero() + 1).orElse(1);
+        Instant agora = relogio.instant();
+        String texto = "Enviado para análise — v" + numero;
+        MensagemChat msg = new MensagemChat(
+                campanha.getChatId(), autor, "sistema", "STATUS", null, texto, null, null, agora
+        );
+        msg = mensagemChatRepository.save(msg);
+
+        CampanhaVersao versao = versaoRepository.save(congelar(retrato, msg.getId()));
         trocaDeStatus.trocar(campanha, StatusCampanha.AGUARDANDO_APROVACAO, autor, versao, null);
         return montador.campanha(carregador.carregar(campanha), autor);
     }
@@ -105,31 +119,66 @@ public class CampanhaService {
         // Justificativa (só reprovar) e re-simulação (só aprovar) nunca se cruzam: a ordem do 5.8 se mantém.
         PermissoesVersao.exigir(reprovar ? AcaoVersao.REPROVAR : AcaoVersao.APROVAR, situacao, supervisor);
 
+        String justificativa = extrairJustificativa(pedido, reprovar);
+        StatusCampanha para = reprovar ? StatusCampanha.REPROVADA : StatusCampanha.APROVADA;
+        gravarMensagemDecisao(campanha, supervisor, versao, reprovar, justificativa);
+
+        trocaDeStatus.trocar(campanha, para, supervisor, versao, justificativa);
+        return montador.campanha(carregador.carregar(campanha), supervisor);
+    }
+
+    private String extrairJustificativa(DecidirCampanhaRequest pedido, boolean reprovar) {
         String justificativa = pedido.justificativa() == null || pedido.justificativa().isBlank()
                 ? null : pedido.justificativa().strip();
         if (reprovar && justificativa == null) {
             throw new BadRequestException("Justificativa obrigatória para reprovar");
         }
-        StatusCampanha para = reprovar ? StatusCampanha.REPROVADA : StatusCampanha.APROVADA;
-        trocaDeStatus.trocar(campanha, para, supervisor, versao, justificativa);
-        return montador.campanha(carregador.carregar(campanha), supervisor);
+        return justificativa;
+    }
+
+    private void gravarMensagemDecisao(Campanha campanha, Usuario supervisor,
+                                      CampanhaVersao versao, boolean reprovar, String justificativa) {
+        String texto = reprovar
+                ? "Reprovado por " + supervisor.getNome() + ": " + justificativa
+                : "Aprovado por " + supervisor.getNome() + " — v" + versao.getNumero();
+        MensagemChat msg = new MensagemChat(
+                campanha.getChatId(), supervisor, "sistema", "STATUS", null, texto, null, null, relogio.instant()
+        );
+        mensagemChatRepository.save(msg);
     }
 
     /** REPROVADA -> RASCUNHO: a próxima submissão será a versão seguinte. */
     @Transactional
     public CampanhaResponse editar(long campanhaId, Usuario autor) {
-        return mudarStatus(campanhaId, AcaoCampanha.EDITAR, StatusCampanha.RASCUNHO, autor);
+        Campanha campanha = paraAlterar(campanhaId);
+        RetratoCampanha retrato = carregador.carregar(campanha);
+        PermissoesCampanha.exigir(AcaoCampanha.EDITAR, retrato.situacao(), autor.getId());
+
+        int proximaVersao = retrato.versaoAtual().map(v -> v.getNumero() + 1).orElse(1);
+        Instant agora = relogio.instant();
+        String texto = "Voltou para rascunho — a próxima submissão será a v" + proximaVersao;
+        MensagemChat msg = new MensagemChat(
+                campanha.getChatId(), autor, "sistema", "STATUS", null, texto, null, null, agora
+        );
+        mensagemChatRepository.save(msg);
+
+        trocaDeStatus.trocar(campanha, StatusCampanha.RASCUNHO, autor, null, null);
+        return montador.campanha(carregador.carregar(campanha), autor);
     }
 
     @Transactional
     public CampanhaResponse arquivar(long campanhaId, Usuario autor) {
-        return mudarStatus(campanhaId, AcaoCampanha.ARQUIVAR, StatusCampanha.ARQUIVADA, autor);
-    }
-
-    private CampanhaResponse mudarStatus(long campanhaId, AcaoCampanha acao, StatusCampanha para, Usuario autor) {
         Campanha campanha = paraAlterar(campanhaId);
-        PermissoesCampanha.exigir(acao, carregador.carregar(campanha).situacao(), autor.getId());
-        trocaDeStatus.trocar(campanha, para, autor, null, null);
+        PermissoesCampanha.exigir(AcaoCampanha.ARQUIVAR, carregador.carregar(campanha).situacao(), autor.getId());
+
+        Instant agora = relogio.instant();
+        String texto = "Arquivada";
+        MensagemChat msg = new MensagemChat(
+                campanha.getChatId(), autor, "sistema", "STATUS", null, texto, null, null, agora
+        );
+        mensagemChatRepository.save(msg);
+
+        trocaDeStatus.trocar(campanha, StatusCampanha.ARQUIVADA, autor, null, null);
         return montador.campanha(carregador.carregar(campanha), autor);
     }
 
@@ -151,12 +200,12 @@ public class CampanhaService {
     }
 
     // PermissoesCampanha já garantiu que existe simulação concluída e que ela não virou versão
-    private CampanhaVersao congelar(RetratoCampanha retrato) {
+    private CampanhaVersao congelar(RetratoCampanha retrato, Long ultimaMensagemId) {
         SimulacaoGravada simulacao = retrato.ultimaSimulacao();
         PeriodoCampanha periodo = campos.periodo(simulacao.regraJson());
         int numero = retrato.versaoAtual().map(versao -> versao.getNumero() + 1).orElse(1);
         return new CampanhaVersao(retrato.campanha(), numero, simulacao.id(), simulacao.regraJson(),
-                simulacao.resultadoJson(), periodo.dataInicio(), periodo.dataFim(), relogio.instant());
+                simulacao.resultadoJson(), periodo.dataInicio(), periodo.dataFim(), ultimaMensagemId, relogio.instant());
     }
 
     private Campanha nova(String nome, String chatId, Usuario autor) {

@@ -38,10 +38,15 @@ public class IaGrpcClientService {
      * Ex.: chamarAgenteLana("Black Friday +1%", "chat-1", "").getRegraJson()
      */
     public InvokeResponse chamarAgenteLana(String prompt, String chatId, String regraJson) {
+        return chamarAgenteLana(prompt, chatId, regraJson, "");
+    }
+
+    public InvokeResponse chamarAgenteLana(String prompt, String chatId, String regraJson, String historicoJson) {
         InvokeRequest request = InvokeRequest.newBuilder()
                 .setPrompt(prompt)
                 .setChatId(chatId)
                 .setRegraJson(regraJson)
+                .setHistoricoJson(historicoJson != null ? historicoJson : "")
                 .build();
 
         return this.blockingStub

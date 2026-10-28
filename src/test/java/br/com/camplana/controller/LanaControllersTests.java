@@ -7,12 +7,14 @@ import br.com.camplana.handler.GlobalExceptionHandler;
 import br.com.camplana.handler.SecurityErrorHandler;
 import br.com.camplana.repository.CampanhaRepository;
 import br.com.camplana.repository.CampanhaVersaoRepository;
+import br.com.camplana.repository.MensagemChatRepository;
 import br.com.camplana.repository.SimulacaoRepository;
 import br.com.camplana.repository.UsuarioRepository;
 import br.com.camplana.security.JwtService;
 import br.com.camplana.security.PasswordConfig;
 import br.com.camplana.security.SecurityConfig;
 import br.com.camplana.security.UsuarioDetailsService;
+import br.com.camplana.service.ChatService;
 import br.com.camplana.service.SimulacaoJobService;
 import br.com.camplana.service.SimulacaoManagerService;
 import br.com.camplana.service.SimulacaoPersistenceService;
@@ -24,16 +26,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -45,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         properties = "api.security.token.secret=segredo-de-teste-com-mais-de-32-caracteres"
 )
 @Import({SecurityConfig.class, SecurityErrorHandler.class, GlobalExceptionHandler.class, JwtService.class,
-        UsuarioDetailsService.class, PasswordConfig.class, SimulacaoManagerService.class})
+        UsuarioDetailsService.class, PasswordConfig.class, SimulacaoManagerService.class, ChatService.class})
 class LanaControllersTests {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -58,6 +65,12 @@ class LanaControllersTests {
 
     @MockitoBean
     private LanaClient lanaClient;
+
+    @MockitoBean
+    private MensagemChatRepository mensagemChatRepository;
+
+    @MockitoBean
+    private TransactionTemplate transactionTemplate;
 
     @MockitoBean
     private SimulacaoPersistenceService persistenceService;
@@ -102,11 +115,17 @@ class LanaControllersTests {
         given(usuarioRepository.findByEmailIgnoreCase(gabriela.getEmail())).willReturn(Optional.of(gabriela));
         autorizacao = "Bearer " + jwtService.gerarToken(sergio, jwtService.getExpirationDate());
         autorizacaoGabriela = "Bearer " + jwtService.gerarToken(gabriela, jwtService.getExpirationDate());
+
+        doAnswer(inv -> {
+            Consumer<TransactionStatus> action = inv.getArgument(0);
+            action.accept(mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
     }
 
     @Test
     void chatDevolveARespostaDaLana() throws Exception {
-        given(lanaClient.invocarAgente(any())).willReturn(JSON.readTree("{\"response\":\"oi\"}"));
+        given(lanaClient.invocarAgente(any(), any())).willReturn(JSON.readTree("{\"response\":\"oi\"}"));
 
         mockMvc.perform(post("/api/chat").header("Authorization", autorizacao)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -117,7 +136,7 @@ class LanaControllersTests {
 
     @Test
     void chatRepassaARegraDoPainelParaALana() throws Exception {
-        given(lanaClient.invocarAgente(any())).willReturn(JSON.readTree("{\"response\":\"ok\"}"));
+        given(lanaClient.invocarAgente(any(), any())).willReturn(JSON.readTree("{\"response\":\"ok\"}"));
 
         mockMvc.perform(post("/api/chat").header("Authorization", autorizacao)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -125,7 +144,7 @@ class LanaControllersTests {
                 .andExpect(status().isOk());
 
         then(lanaClient).should().invocarAgente(argThat(corpo ->
-                corpo instanceof ChatRequest pedido && "r1".equals(pedido.regra().path("rule_id").asString())));
+                corpo instanceof ChatRequest pedido && "r1".equals(pedido.regra().path("rule_id").asString())), any());
     }
 
     @Test

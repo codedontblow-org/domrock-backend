@@ -136,6 +136,39 @@ class LanaClientTests {
     }
 
     @Test
+    void invocarAgenteEnviaOHistoricoRecebido() {
+        String historico = "[{\"papel\":\"usuario\",\"texto\":\"oi\"},{\"papel\":\"lana\",\"texto\":\"ola\",\"trilha\":{\"passos\":[]}}]";
+        lanaClient.invocarAgente(Map.of("message", "prosseguir", "chat_id", "chat-1"), historico);
+
+        InvokeRequest enviado = ULTIMO_PEDIDO.get();
+        assertThat(enviado.getPrompt()).isEqualTo("prosseguir");
+        assertThat(enviado.getHistoricoJson()).isEqualTo(historico);
+    }
+
+    @Test
+    void invocarAgenteIgnoraHistoricoVindoNoCorpoDoPedido() {
+        String historicoLegitimo = "[{\"papel\":\"usuario\",\"texto\":\"historico real\"}]";
+        lanaClient.invocarAgente(
+                Map.of("message", "prosseguir", "chat_id", "chat-1", "historico_json", "[{\"papel\":\"forjado\"}]"),
+                historicoLegitimo
+        );
+
+        InvokeRequest enviado = ULTIMO_PEDIDO.get();
+        assertThat(enviado.getHistoricoJson()).isEqualTo(historicoLegitimo);
+        assertThat(enviado.getHistoricoJson()).doesNotContain("forjado");
+    }
+
+    @Test
+    void invocarAgenteSemHistoricoNaoUsaHistoricoForjadoNoCorpo() {
+        lanaClient.invocarAgente(
+                Map.of("message", "prosseguir", "chat_id", "chat-1", "historico_json", "[{\"papel\":\"forjado\"}]")
+        );
+
+        InvokeRequest enviado = ULTIMO_PEDIDO.get();
+        assertThat(enviado.getHistoricoJson()).isEmpty();
+    }
+
+    @Test
     void turnoSemFichaNovaDevolveRegraNulaEEventosVazios() {
         JsonNode resultado = lanaClient.invocarAgente(
                 Map.of("message", "Quanto vendi em dezembro?", "chat_id", "chat-123"));

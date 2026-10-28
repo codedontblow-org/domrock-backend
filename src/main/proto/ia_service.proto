@@ -14,6 +14,7 @@ message InvokeRequest {
   string prompt = 1;
   string chat_id = 2;
   string regra_json = 3;
+  string historico_json = 4;  // A6-65: mensagens anteriores da conversa, em JSON
 }
 
 message InvokeResponse {
