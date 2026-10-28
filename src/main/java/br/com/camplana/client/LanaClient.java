@@ -26,10 +26,15 @@ public class LanaClient {
     private final ObjectMapper objectMapper;
 
     public JsonNode invocarAgente(Object corpo) {
+        return invocarAgente(corpo, "");
+    }
+
+    public JsonNode invocarAgente(Object corpo, String historicoJson) {
         JsonNode pedido = objectMapper.valueToTree(corpo);
         String chatId = pedido.hasNonNull("chat_id") ? pedido.get("chat_id").asString() : "default";
         String mensagem = pedido.hasNonNull("message") ? pedido.get("message").asString() : "";
-        InvokeResponse resposta = chamar(mensagem, chatId, regraEmJson(pedido));
+        String historico = historicoJson != null ? historicoJson : "";
+        InvokeResponse resposta = chamar(mensagem, chatId, regraEmJson(pedido), historico);
         return montarResposta(chatId, resposta);
     }
 
@@ -39,9 +44,9 @@ public class LanaClient {
         return regra.isObject() ? objectMapper.writeValueAsString(regra) : "";
     }
 
-    private InvokeResponse chamar(String mensagem, String chatId, String regraJson) {
+    private InvokeResponse chamar(String mensagem, String chatId, String regraJson, String historicoJson) {
         try {
-            return iaGrpcClientService.chamarAgenteLana(mensagem, chatId, regraJson);
+            return iaGrpcClientService.chamarAgenteLana(mensagem, chatId, regraJson, historicoJson);
         } catch (StatusRuntimeException e) {
             throw traduzirFalha(e.getStatus());
         }

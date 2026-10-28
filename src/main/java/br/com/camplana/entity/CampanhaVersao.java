@@ -58,6 +58,11 @@ public class CampanhaVersao {
 
     public CampanhaVersao(Campanha campanha, int numero, Long simulacaoId, String regra, String resultado,
                           LocalDate dataInicio, LocalDate dataFim, Instant submetidaEm) {
+        this(campanha, numero, simulacaoId, regra, resultado, dataInicio, dataFim, null, submetidaEm);
+    }
+
+    public CampanhaVersao(Campanha campanha, int numero, Long simulacaoId, String regra, String resultado,
+                          LocalDate dataInicio, LocalDate dataFim, Long ultimaMensagemId, Instant submetidaEm) {
         this.campanha = campanha;
         this.numero = numero;
         this.simulacaoId = simulacaoId;
@@ -65,6 +70,7 @@ public class CampanhaVersao {
         this.resultado = resultado;
         this.dataInicio = dataInicio;
         this.dataFim = dataFim;
+        this.ultimaMensagemId = ultimaMensagemId;
         this.submetidaEm = submetidaEm;
     }
 }

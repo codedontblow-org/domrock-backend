@@ -6,6 +6,7 @@ import br.com.camplana.entity.StatusCampanha;
 import br.com.camplana.entity.Usuario;
 import br.com.camplana.repository.CampanhaRepository;
 import br.com.camplana.repository.CampanhaVersaoRepository;
+import br.com.camplana.repository.MensagemChatRepository;
 import br.com.camplana.repository.UsuarioRepository;
 import br.com.camplana.security.JwtService;
 import com.jayway.jsonpath.JsonPath;
@@ -39,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-abstract class CampanhaApiBase {
+public abstract class CampanhaApiBase {
 
     protected static final String REPROVACAO =
             "a meta de R$ 2 milhões está abaixo da venda real do período (R$ 2,4 milhões)";
@@ -50,6 +51,7 @@ abstract class CampanhaApiBase {
     @Autowired protected UsuarioRepository usuarioRepository;
     @Autowired protected CampanhaRepository campanhaRepository;
     @Autowired protected CampanhaVersaoRepository versaoRepository;
+    @Autowired protected MensagemChatRepository mensagemChatRepository;
     @Autowired protected FakeRegistroSimulacoes simulacoes;
     @Autowired protected ContextoCampanhasService contextoCampanhas;
 
@@ -62,6 +64,7 @@ abstract class CampanhaApiBase {
         jdbc.execute("DELETE FROM campanha_status_log");
         jdbc.execute("DELETE FROM campanha_versao");
         jdbc.execute("DELETE FROM campanha");
+        jdbc.execute("DELETE FROM mensagem_chat");
         simulacoes.limpar();
         proximaSimulacao = 345;
         gabriela = usuarioRepository.findById(1).orElseThrow();
@@ -116,6 +119,19 @@ abstract class CampanhaApiBase {
 
     protected static String salvar(String nome, String chatId, long simulacaoId) {
         return "{\"nome\": \"%s\", \"chat_id\": \"%s\", \"simulacao_id\": %d}".formatted(nome, chatId, simulacaoId);
+    }
+
+    protected String autorizacao(Usuario usuario) {
+        return "Bearer " + token(usuario);
+    }
+
+    protected long criarCampanha(String chatId) throws Exception {
+        long simulacaoId = proximaSimulacao++;
+        simulacoes.concluida(simulacaoId, gabriela.getId(), chatId);
+        String resposta = enviar(post("/api/campanhas"), gabriela, salvar("Campanha " + chatId, chatId, simulacaoId))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(resposta, "$.id")).longValue();
     }
 
     protected ResultActions enviar(MockHttpServletRequestBuilder pedido, Usuario usuario) throws Exception {

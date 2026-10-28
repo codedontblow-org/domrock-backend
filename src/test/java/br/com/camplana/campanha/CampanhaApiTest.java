@@ -1,5 +1,7 @@
 package br.com.camplana.campanha;
 
+import br.com.camplana.entity.CampanhaVersao;
+import br.com.camplana.entity.MensagemChat;
 import br.com.camplana.entity.StatusCampanha;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -98,6 +100,13 @@ class CampanhaApiTest extends CampanhaApiBase {
                 .andExpect(jsonPath("$.log[1].versao").value(1))
                 .andExpect(jsonPath("$.log[1].usuario.nome").value("Gabriela"))
                 .andExpect(jsonPath("$.log[1].em").value("2026-10-21T13:05:00Z"));
+
+        CampanhaVersao v1 = versaoRepository.findByCampanhaIdOrderByNumeroAsc(id).get(0);
+        assertThat(v1.getUltimaMensagemId()).isNotNull();
+        MensagemChat msg = mensagemChatRepository.findById(v1.getUltimaMensagemId()).orElseThrow();
+        assertThat(msg.getTexto()).isEqualTo("Enviado para análise — v1");
+        assertThat(msg.getPapel()).isEqualTo("sistema");
+        assertThat(msg.getTipo()).isEqualTo("STATUS");
     }
 
     @Test

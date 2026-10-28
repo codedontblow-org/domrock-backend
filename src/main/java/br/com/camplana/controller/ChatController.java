@@ -1,26 +1,32 @@
 package br.com.camplana.controller;
 
-import br.com.camplana.client.LanaClient;
 import br.com.camplana.dto.ChatRequest;
+import br.com.camplana.entity.Usuario;
+import br.com.camplana.service.ChatService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 import tools.jackson.databind.JsonNode;
 
-/** US1/US2: conversa com a Lana. A resposta traz `regra` quando o agente extraiu parâmetros. */
+/** US1/US2: conversa com a Lana e histórico de mensagens. */
 @RestController
 @RequestMapping("/api/chat")
 @RequiredArgsConstructor
 public class ChatController {
 
-    private final LanaClient lanaClient;
+    private final ChatService chatService;
 
     @PostMapping
-    public ResponseEntity<JsonNode> conversar(@Valid @RequestBody ChatRequest body) {
-        return ResponseEntity.ok(lanaClient.invocarAgente(body));
+    public ResponseEntity<JsonNode> conversar(@Valid @RequestBody ChatRequest body,
+                                              @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(chatService.conversar(body, usuario));
+    }
+
+    @GetMapping("/{chat_id}/mensagens")
+    public ResponseEntity<JsonNode> buscarMensagens(@PathVariable("chat_id") String chatId,
+                                                    @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(chatService.buscarMensagens(chatId, usuario));
     }
 }
