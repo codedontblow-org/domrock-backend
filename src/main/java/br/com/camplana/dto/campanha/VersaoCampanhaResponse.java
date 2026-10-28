@@ -26,5 +26,6 @@ public record VersaoCampanhaResponse(
         @JsonProperty("resimulacao_necessaria") boolean resimulacaoNecessaria,
         @JsonProperty("aprovadas_depois") List<AprovadaDepoisResponse> aprovadasDepois,
         ResimulacaoResponse resimulacao,
-        DecisaoResponse decisao
+        DecisaoResponse decisao,
+        @JsonProperty("intercorrencias") List<IntercorrenciaResponse> intercorrencias
 ) {}

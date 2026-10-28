@@ -403,4 +403,36 @@ class CampanhaApiTest extends CampanhaApiBase {
         var semPropria = contextoCampanhas.enriquecer(pedido).path("campanhas");
         assertThat(semPropria).extracting(f -> f.path("campanha_id").asLong()).containsExactly(aprovada);
     }
+
+    @Test
+    void versaoTrazIntercorrenciasERetornaVaziaQuandoNaoHaEvento() throws Exception {
+        long id = submeterBlackFriday(gabriela);
+
+        // Sem eventos cadastrados, intercorrencias é lista vazia
+        enviar(get("/api/campanhas/" + id + "/versoes/1"), sergio)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intercorrencias", empty()));
+
+        // Cadastramos dados no escopo da Black Friday (marcas ALL, cargos 100/200/300, 24/11 a 30/11/2025)
+        jdbc.execute("INSERT INTO marca (id, cod_marca, descr_marca) VALUES (91, '10', 'Marca 10') ON CONFLICT DO NOTHING");
+        jdbc.execute("INSERT INTO cargo (id, cod_cargo, descr_cargo) VALUES (91, '100', 'Vendedor loja') ON CONFLICT DO NOTHING");
+        jdbc.execute("INSERT INTO loja (id, cod_loja, descr_loja, marca_id) VALUES (91, 'L91', 'Loja 91', (SELECT id FROM marca WHERE cod_marca = '10')) ON CONFLICT DO NOTHING");
+        jdbc.execute("INSERT INTO funcionario (id, matricula, data_admissao) VALUES (91, 'MATRIC-BF', '2020-01-01') ON CONFLICT DO NOTHING");
+        jdbc.execute("INSERT INTO funcionario_cargo (funcionario_id, cargo_id, date_ref) VALUES (91, (SELECT id FROM cargo WHERE cod_cargo = '100'), '2025-11-01') ON CONFLICT DO NOTHING");
+        jdbc.execute("INSERT INTO funcionario_loja (funcionario_id, loja_id, date_ref) VALUES (91, (SELECT id FROM loja WHERE cod_loja = 'L91'), '2025-11-01') ON CONFLICT DO NOTHING");
+        jdbc.execute("""
+                INSERT INTO evento_rh (matricula, tipo, data_inicio, data_fim, cod_loja, origem)
+                VALUES ('MATRIC-BF', 'afastamento', '2025-11-25', '2025-11-28', 'L91', 'rh_novembro.xlsx')
+                """);
+
+        enviar(get("/api/campanhas/" + id + "/versoes/1"), sergio)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intercorrencias", hasSize(1)))
+                .andExpect(jsonPath("$.intercorrencias[0].matricula").value("MATRIC-BF"))
+                .andExpect(jsonPath("$.intercorrencias[0].tipo").value("afastamento"))
+                .andExpect(jsonPath("$.intercorrencias[0].cargo").value("100"))
+                .andExpect(jsonPath("$.intercorrencias[0].data_inicio").value("2025-11-25"))
+                .andExpect(jsonPath("$.intercorrencias[0].data_fim").value("2025-11-28"))
+                .andExpect(jsonPath("$.intercorrencias[0].origem").value("rh_novembro.xlsx"));
+    }
 }

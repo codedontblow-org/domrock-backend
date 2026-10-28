@@ -61,6 +61,7 @@ public abstract class CampanhaApiBase {
     @BeforeEach
     void limparCampanhas() {
         limparResimulacoes();
+        jdbc.execute("DELETE FROM evento_rh");
         jdbc.execute("DELETE FROM campanha_status_log");
         jdbc.execute("DELETE FROM campanha_versao");
         jdbc.execute("DELETE FROM campanha");

@@ -26,11 +26,14 @@ public class CampanhaRespostaMontador {
 
     private final CamposDaSimulacao campos;
     private final AprovacaoDaVersao aprovacao;
+    private final FonteIntercorrencias fonteIntercorrencias;
     private final Clock relogio;
 
-    public CampanhaRespostaMontador(CamposDaSimulacao campos, AprovacaoDaVersao aprovacao, Clock relogio) {
+    public CampanhaRespostaMontador(CamposDaSimulacao campos, AprovacaoDaVersao aprovacao,
+                                    FonteIntercorrencias fonteIntercorrencias, Clock relogio) {
         this.campos = campos;
         this.aprovacao = aprovacao;
+        this.fonteIntercorrencias = fonteIntercorrencias;
         this.relogio = relogio;
     }
 
@@ -85,12 +88,15 @@ public class CampanhaRespostaMontador {
         List<CampanhaStatusLog> daVersao = logDaVersao(retrato.log(), versao);
         PendenciasDaVersao pendencias = aprovacao.pendencias(retrato, versao);
         SituacaoVersao situacao = aprovacao.situacao(retrato, versao, pendencias);
+        List<IntercorrenciaResponse> intercorrencias = campos.escopo(versao.getRegra())
+                .map(fonteIntercorrencias::buscarPorEscopo)
+                .orElse(List.of());
         return new VersaoCampanhaResponse(retrato.campanha().getId(), versao.getNumero(),
                 statusDaVersao(daVersao), PermissoesVersao.acoes(situacao, leitor),
                 usuario(retrato.campanha().getAutor()), versao.getSubmetidaEm(), versao.getSimulacaoId(),
                 versao.getRegra(), versao.getResultado(), versao.getUltimaMensagemId(),
                 situacao.resimulacaoNecessaria(), aprovadasDepois(pendencias), resimulacao(pendencias),
-                decisao(daVersao));
+                decisao(daVersao), intercorrencias);
     }
 
     private static List<AprovadaDepoisResponse> aprovadasDepois(PendenciasDaVersao pendencias) {
