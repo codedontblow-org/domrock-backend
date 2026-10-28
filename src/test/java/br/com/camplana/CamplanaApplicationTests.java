@@ -6,7 +6,13 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = {
+        "api.security.token.secret=segredo-de-teste-com-mais-de-32-caracteres",
+        "spring.flyway.placeholders.lana_db_password=lana_leitura",
+        "lana.url=http://localhost:8000",
+        "grpc.lana.host=localhost",
+        "grpc.lana.port=50051"
+})
 @ActiveProfiles("test")
 class CamplanaApplicationTests {
 
